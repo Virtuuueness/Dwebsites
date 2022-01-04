@@ -9,6 +9,7 @@
 @import "data.css";
 @import "search.css";
 @import "naming.css";
+@import "browsewebsite.css";
 
 body {
     background-color: #fff;
