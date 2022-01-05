@@ -29,11 +29,13 @@
 
     <div data-controller="browsewebsite" class="browsewebsite">
         <h2 class="collapsible">Browse Website(s)</h2>
-        <div>
-            <input data-browsewebsite-target="websiteName" name="websiteName" type="text" placeholder="website name"/>
-            <button data-action="click->browsewebsite#browse">
-                Browse/run redirect server
-            </button>
+        <div class="browse-form">
+            <div class="browse">
+                <input data-browsewebsite-target="websiteName" name="websiteName" type="text" placeholder="website name"/>
+                <button data-action="click->browsewebsite#browse">
+                    Browse website
+                </button>
+            </div>
         </div>
     </div>
 
