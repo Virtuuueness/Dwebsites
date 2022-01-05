@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/rs/zerolog"
@@ -52,9 +53,15 @@ func (re *redirectServer) BrowseHandler() http.HandlerFunc {
 func (re *redirectServer) startRedirectServer() {
 	if !re.isRunning {
 		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			http.ServeFile(w, r, re.getWebsiteAnd(r.URL.Path[1:], func(p string) {
-				decorateFolder(p)
-			}))
+			fullURL := r.URL.Path[1:]
+			// Extract domain name to get site's folder
+			reg, err := regexp.Compile(`(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]`)
+			if err != nil || !reg.MatchString(fullURL) {
+				http.ServeFile(w, r, error404File)
+				return
+			}
+			// Get site's folder (either locally or remote and serve the right file)
+			http.ServeFile(w, r, re.getWebsiteAndRedirectLinks(reg.FindString(fullURL), fullURL))
 		})
 		re.log.Info().Msg("Starting server at port " + localPort + "\n")
 		go http.ListenAndServe(localPort, nil)
@@ -84,8 +91,8 @@ func (re *redirectServer) respondRedirectUrl(w http.ResponseWriter, r *http.Requ
 	w.Write(jsonResp)
 }
 
-// Get files remotely from peerster and apply "and" function to local folder
-func (r *redirectServer) getWebsiteAnd(websiteName string, and func(string)) string {
+// Get files remotely and decorate local folder's links or from cache if same version than peerster
+func (r *redirectServer) getWebsiteAndRedirectLinks(websiteName string, fullURL string) string {
 	addr := r.peer.Resolve(websiteName)
 	fetchedRecord, ok := r.peer.FetchPointerRecord(addr)
 	if !ok {
@@ -96,12 +103,12 @@ func (r *redirectServer) getWebsiteAnd(websiteName string, and func(string)) str
 	if err != nil {
 		return error404File
 	}
-	err = ioutil.WriteFile(websiteName+".html", res, 0664) // TODO handle folder and not only unique files
+	err = ioutil.WriteFile(websiteName, res, 0664) // TODO handle folder and not unique file
 	if err != nil {
 		return error404File
 	}
-	and(websiteName)
-	return websiteName
+	decorateFolder(websiteName)
+	return fullURL
 }
 
 // Decorate all HTML file in a folder by changing link to localhost redirect
