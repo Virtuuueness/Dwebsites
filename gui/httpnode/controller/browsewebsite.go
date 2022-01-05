@@ -17,9 +17,10 @@ import (
 )
 
 type redirectServer struct {
-	peer      peer.Peer
-	log       *zerolog.Logger
-	isRunning bool
+	peer       peer.Peer
+	log        *zerolog.Logger
+	isRunning  bool
+	localCache map[string]uint
 }
 
 const localPort = ":8080"
@@ -27,9 +28,13 @@ const hostURL = "http://localhost" + localPort + "/"
 const error404File = "404.html"
 
 func NewRedirectServer(peer peer.Peer, log *zerolog.Logger) redirectServer {
+	// Empty tmp/ folder
+	os.RemoveAll("tmp/")
+	os.MkdirAll("tmp/", os.ModePerm)
 	return redirectServer{
-		peer: peer,
-		log:  log,
+		peer:       peer,
+		log:        log,
+		localCache: make(map[string]uint),
 	}
 }
 
@@ -54,14 +59,8 @@ func (re *redirectServer) startRedirectServer() {
 	if !re.isRunning {
 		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			fullURL := r.URL.Path[1:]
-			// Extract domain name to get site's folder
-			reg, err := regexp.Compile(`(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]`)
-			if err != nil || !reg.MatchString(fullURL) {
-				http.ServeFile(w, r, error404File)
-				return
-			}
 			// Get site's folder (either locally or remote and serve the right file)
-			http.ServeFile(w, r, re.getWebsiteAndRedirectLinks(reg.FindString(fullURL), fullURL))
+			http.ServeFile(w, r, re.getWebsiteAndRedirectLinks(fullURL))
 		})
 		re.log.Info().Msg("Starting server at port " + localPort + "\n")
 		go http.ListenAndServe(localPort, nil)
@@ -92,13 +91,24 @@ func (re *redirectServer) respondRedirectUrl(w http.ResponseWriter, r *http.Requ
 }
 
 // Get files remotely and decorate local folder's links or from cache if same version than peerster
-func (r *redirectServer) getWebsiteAndRedirectLinks(websiteName string, fullURL string) string {
+func (r *redirectServer) getWebsiteAndRedirectLinks(fullURL string) string {
+	ioutil.WriteFile("test.txt", []byte("hello\ngo\n"), 0664)
+	// Extract domain name to get site's folder
+	reg, err := regexp.Compile(`(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]`)
+	if err != nil || !reg.MatchString(fullURL) {
+		return error404File
+	}
+	websiteName := reg.FindString(fullURL)
 	addr := r.peer.Resolve(websiteName)
 	fetchedRecord, ok := r.peer.FetchPointerRecord(addr)
 	if !ok {
 		return error404File
 	}
 	r.log.Info().Msg("fetched record: " + fetchedRecord.Value)
+	// Last version is already in cache
+	if seq, ok := r.localCache[websiteName]; ok && seq == fetchedRecord.Sequence {
+		return "tmp/" + fullURL
+	}
 	res, err := r.peer.DownloadDHT(fetchedRecord.Value)
 	if err != nil {
 		return error404File
@@ -108,7 +118,8 @@ func (r *redirectServer) getWebsiteAndRedirectLinks(websiteName string, fullURL 
 		return error404File
 	}
 	decorateFolder(websiteName)
-	return fullURL
+	r.localCache[websiteName] = fetchedRecord.Sequence
+	return "tmp/" + fullURL
 }
 
 // Decorate all HTML file in a folder by changing link to localhost redirect
