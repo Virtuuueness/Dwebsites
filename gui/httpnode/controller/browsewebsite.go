@@ -62,7 +62,7 @@ func (re *redirectServer) startRedirectServer() {
 			// Get site's folder (either locally or remote and serve the right file)
 			http.ServeFile(w, r, re.getWebsiteAndRedirectLinks(fullURL))
 		})
-		re.log.Info().Msg("Starting server at port " + localPort + "\n")
+		re.log.Info().Msg("starting server at port " + localPort + "\n")
 		go http.ListenAndServe(localPort, nil)
 		re.isRunning = true
 	}
@@ -85,7 +85,7 @@ func (re *redirectServer) respondRedirectUrl(w http.ResponseWriter, r *http.Requ
 	resp["redirect"] = hostURL + res.WebsiteName
 	jsonResp, err := json.Marshal(resp)
 	if err != nil {
-		re.log.Fatal().Msgf("Error happened in JSON marshal. Err: %s", err)
+		re.log.Fatal().Msgf("error happened in JSON marshal. Err: %s", err)
 	}
 	w.Write(jsonResp)
 }
@@ -96,12 +96,14 @@ func (r *redirectServer) getWebsiteAndRedirectLinks(fullURL string) string {
 	// Extract domain name to get site's folder
 	reg, err := regexp.Compile(`(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]`)
 	if err != nil || !reg.MatchString(fullURL) {
+		r.log.Info().Msg("Website not found using regex")
 		return error404File
 	}
 	websiteName := reg.FindString(fullURL)
 	addr := r.peer.Resolve(websiteName)
 	fetchedRecord, ok := r.peer.FetchPointerRecord(addr)
 	if !ok {
+		r.log.Fatal().Msg("website not found" + websiteName)
 		return error404File
 	}
 	r.log.Info().Msg("fetched record: " + fetchedRecord.Value)
@@ -111,10 +113,12 @@ func (r *redirectServer) getWebsiteAndRedirectLinks(fullURL string) string {
 	}
 	res, err := r.peer.DownloadDHT(fetchedRecord.Value)
 	if err != nil {
+		r.log.Fatal().Msg("could not download DHT from pointer: " + fetchedRecord.Value)
 		return error404File
 	}
 	err = ioutil.WriteFile(websiteName, res, 0664) // TODO handle folder and not unique file
 	if err != nil {
+		r.log.Fatal().Msg("could not write folder")
 		return error404File
 	}
 	decorateFolder(websiteName)
