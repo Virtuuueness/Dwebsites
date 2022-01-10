@@ -17,16 +17,17 @@ import (
 // 	return n.CreatePointerRecord(privateKey, newValue, record.Sequence+1, newTtl)
 // }
 
-func (n *node) CreateFolderPointerRecord(privateKey *rsa.PrivateKey, links []string, sequence, ttl uint) (peer.PointerRecord, error) {
-	return n.createPointer(privateKey, "", links, sequence, ttl)
+func (n *node) CreateFolderPointerRecord(privateKey *rsa.PrivateKey, name string, links []string, sequence, ttl uint) (peer.PointerRecord, error) {
+	return n.createPointer(privateKey, name, "", links, sequence, ttl)
 }
 
-func (n *node) CreatePointerRecord(privateKey *rsa.PrivateKey, value string, sequence, ttl uint) (peer.PointerRecord, error) {
-	return n.createPointer(privateKey, value, nil, sequence, ttl)
+func (n *node) CreatePointerRecord(privateKey *rsa.PrivateKey, name string, value string, sequence, ttl uint) (peer.PointerRecord, error) {
+	return n.createPointer(privateKey, name, value, nil, sequence, ttl)
 }
 
-func (n *node) createPointer(privateKey *rsa.PrivateKey, value string, links []string, sequence, ttl uint) (peer.PointerRecord, error) {
+func (n *node) createPointer(privateKey *rsa.PrivateKey, name string, value string, links []string, sequence, ttl uint) (peer.PointerRecord, error) {
 	var record peer.PointerRecord
+	record.Name = name
 	record.Value = value
 	record.Sequence = sequence
 	record.TTL = ttl
