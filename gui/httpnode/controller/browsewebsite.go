@@ -25,7 +25,7 @@ type redirectServer struct {
 
 const localPort = ":8080"
 const hostURL = "http://localhost" + localPort + "/"
-const error404File = "404.html"
+const error404File = "web/404.html"
 
 func NewRedirectServer(peer peer.Peer, log *zerolog.Logger) redirectServer {
 	// Empty tmp/ folder
@@ -92,7 +92,6 @@ func (re *redirectServer) respondRedirectUrl(w http.ResponseWriter, r *http.Requ
 
 // Get files remotely and decorate local folder's links or from cache if same version than peerster
 func (r *redirectServer) getWebsiteAndRedirectLinks(fullURL string) string {
-	ioutil.WriteFile("test.txt", []byte("hello\ngo\n"), 0664)
 	// Extract domain name to get site's folder
 	reg, err := regexp.Compile(`(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]`)
 	if err != nil || !reg.MatchString(fullURL) {
@@ -101,24 +100,22 @@ func (r *redirectServer) getWebsiteAndRedirectLinks(fullURL string) string {
 	}
 	websiteName := reg.FindString(fullURL)
 	addr := r.peer.Resolve(websiteName)
-	fetchedRecord, ok := r.peer.FetchPointerRecord(addr)
-	if !ok {
-		r.log.Fatal().Msg("website not found" + websiteName)
+	if addr == "" {
+		r.log.Error().Msg("website not found " + websiteName)
 		return error404File
 	}
-	r.log.Info().Msg("fetched record: " + fetchedRecord.Value)
+	fetchedRecord, ok := r.peer.FetchPointerRecord(addr)
+	if !ok {
+		r.log.Error().Msg("website not found " + websiteName)
+		return error404File
+	}
 	// Last version is already in cache
 	if seq, ok := r.localCache[websiteName]; ok && seq == fetchedRecord.Sequence {
 		return "tmp/" + fullURL
 	}
-	res, err := r.peer.DownloadDHT(fetchedRecord.Value)
+	_, err = r.peer.ReconstructFolderFromRecord("tmp/", fetchedRecord)
 	if err != nil {
-		r.log.Fatal().Msg("could not download DHT from pointer: " + fetchedRecord.Value)
-		return error404File
-	}
-	err = ioutil.WriteFile(websiteName, res, 0664) // TODO handle folder and not unique file
-	if err != nil {
-		r.log.Fatal().Msg("could not write folder")
+		r.log.Error().Msg("could not reconstruct folder from pointer: " + addr)
 		return error404File
 	}
 	decorateFolder(websiteName)
