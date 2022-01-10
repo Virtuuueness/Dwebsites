@@ -6,7 +6,9 @@ import (
 	"crypto/rsa"
 	"crypto/sha1"
 	"fmt"
+	"io/ioutil"
 	"math/big"
+	"os"
 	"testing"
 	"time"
 
@@ -24,7 +26,7 @@ func Test_MUTABLE_CreateValidate(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
-	record, err := node1.CreatePointerRecord(privateKey, "some_metahash", 0, 10)
+	record, err := node1.CreatePointerRecord(privateKey, "some name", "some_metahash", 0, 10)
 	require.NoError(t, err)
 
 	err = node1.ValidatePointerRecord(record, &privateKey.PublicKey)
@@ -193,7 +195,7 @@ func Test_MUTABLE_KademliaEditFileUnderPointerRecord(t *testing.T) {
 
 	// node 0 generates pointer record
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	record, err := nodes[0].CreatePointerRecord(privateKey, mhB, 0, 100) // sequence 0
+	record, err := nodes[0].CreatePointerRecord(privateKey, "name", mhB, 0, 100) // sequence 0
 	require.NoError(t, err)
 	// node 0 publishes record
 	recordHash, err := nodes[0].PublishPointerRecord(record)
@@ -220,7 +222,7 @@ func Test_MUTABLE_KademliaEditFileUnderPointerRecord(t *testing.T) {
 
 	// node 0 edits pointer record by creating a new pointer record using same private key
 	// note that only owner of private key can edit a record, otherwise validation will fail
-	editedRecord, err := nodes[0].CreatePointerRecord(privateKey, mhC, record.Sequence+1, 10)
+	editedRecord, err := nodes[0].CreatePointerRecord(privateKey, "name", mhC, record.Sequence+1, 10)
 	require.NoError(t, err)
 
 	// node 0 publishes upadted record
@@ -242,6 +244,176 @@ func Test_MUTABLE_KademliaEditFileUnderPointerRecord(t *testing.T) {
 		res, err := nodes[i].DownloadDHT(fetchedRecord.Value)
 		require.NoError(t, err)
 		require.Equal(t, fileC, res)
+	}
+}
+
+func Test_MUTABLE_KademliaFolderPointerToReconstructFolder(t *testing.T) {
+	numNodes := uint(5)
+	if numNodes < 2 {
+		return
+	}
+
+	transp := channel.NewTransport()
+	nodes := make([]z.TestNode, numNodes)
+
+	for i := range nodes {
+		node := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithTotalPeers(numNodes))
+		defer node.Stop()
+
+		nodes[i] = node
+	}
+
+	// bootstrap all nodes
+	for i := uint(1); i < numNodes; i++ {
+		nodes[i].Bootstrap(nodes[0].GetAddr())
+	}
+	println("Bootstraped ", numNodes, " nodes")
+	time.Sleep(time.Second * 1)
+
+	tmpFolder := os.TempDir() + "/" + "tmpFolder/"
+
+	err := os.RemoveAll(tmpFolder)
+	require.NoError(t, err)
+	err = os.Mkdir(tmpFolder, 0777)
+	require.NoError(t, err)
+	err = os.Mkdir(tmpFolder+"subfolder1", 0777)
+	require.NoError(t, err)
+	err = os.Mkdir(tmpFolder+"subfolder2", 0777)
+	require.NoError(t, err)
+	err = ioutil.WriteFile(tmpFolder+"test.txt", []byte("File test content"), 0666)
+	require.NoError(t, err)
+	err = ioutil.WriteFile(tmpFolder+"subfolder1/test2.txt", []byte("File test2 content"), 0666)
+	require.NoError(t, err)
+
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	recordHash, err := nodes[0].CreateAndPublishFolderRecord(tmpFolder, "tmpFolder", privateKey, 0, 10)
+	require.NoError(t, err)
+
+	time.Sleep(time.Second * 2)
+
+	record, ok := nodes[0].FetchPointerRecord(recordHash)
+	require.Equal(t, true, ok)
+
+	tmpFolderResult := os.TempDir() + "/" + "tmpFolderResult/"
+
+	err = os.RemoveAll(tmpFolderResult)
+	require.NoError(t, err)
+	err = os.Mkdir(tmpFolderResult, 0777)
+	require.NoError(t, err)
+
+	nodes[0].ReconstructFolderFromRecord(tmpFolderResult, record)
+	_, err = os.Stat(tmpFolderResult + "tmpFolder")
+	require.Equal(t, nil, err)
+	_, err = os.Stat(tmpFolderResult + "tmpFolder/subfolder1")
+	require.Equal(t, nil, err)
+	_, err = os.Stat(tmpFolderResult + "tmpFolder/subfolder2")
+	require.Equal(t, nil, err)
+	_, err = os.Stat(tmpFolderResult + "tmpFolder/test.txt")
+	require.Equal(t, nil, err)
+	content, err := ioutil.ReadFile(tmpFolderResult + "tmpFolder/test.txt")
+	require.Equal(t, nil, err)
+	require.Equal(t, "File test content", string(content))
+	_, err = os.Stat(tmpFolderResult + "tmpFolder/subfolder1/test2.txt")
+	require.Equal(t, nil, err)
+	content, err = ioutil.ReadFile(tmpFolderResult + "tmpFolder/subfolder1/test2.txt")
+	require.Equal(t, nil, err)
+	require.Equal(t, "File test2 content", string(content))
+
+	err = os.RemoveAll(tmpFolder)
+	require.NoError(t, err)
+	err = os.RemoveAll(tmpFolderResult)
+	require.NoError(t, err)
+}
+
+func Test_MUTABLE_KademliaUseFolderUnderPointerRecord(t *testing.T) {
+	numNodes := uint(10)
+	if numNodes < 2 {
+		return
+	}
+
+	transp := channel.NewTransport()
+	nodes := make([]z.TestNode, numNodes)
+
+	for i := range nodes {
+		node := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithTotalPeers(numNodes))
+		defer node.Stop()
+
+		nodes[i] = node
+	}
+
+	// bootstrap all nodes
+	for i := uint(1); i < numNodes; i++ {
+		nodes[i].Bootstrap(nodes[0].GetAddr())
+	}
+	println("Bootstraped ", numNodes, " nodes")
+	time.Sleep(time.Second * 1)
+
+	fileNames := make([]string, 0)
+	// upload multiple files that will be in the folder
+	for i := 0; i < 2; i++ {
+		// node 0 uploads file
+		fileB := []byte(fmt.Sprintf("File %d content", i))
+		mhB, err := nodes[0].UploadDHT(bytes.NewBuffer(fileB))
+		require.NoError(t, err)
+
+		// node 0 generates pointer record
+		privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+		record, err := nodes[0].CreatePointerRecord(privateKey, fmt.Sprintf("File%d", i), mhB, 0, 100) // sequence 0
+		require.NoError(t, err)
+		// node 0 publishes record
+		recordHash, err := nodes[0].PublishPointerRecord(record)
+		require.NoError(t, err)
+
+		fileNames = append(fileNames, recordHash)
+	}
+
+	// also add some subfolders
+	for i := 0; i < 3; i++ {
+		// node 0 generates pointer record
+		privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+		record, err := nodes[0].CreateFolderPointerRecord(privateKey, fmt.Sprintf("Folder%d", i), make([]string, 0), 0, 100) // sequence 0
+		require.NoError(t, err)
+		// node 0 publishes record
+		recordHash, err := nodes[0].PublishPointerRecord(record)
+		require.NoError(t, err)
+
+		fileNames = append(fileNames, recordHash)
+	}
+
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	record, err := nodes[0].CreateFolderPointerRecord(privateKey, "topFolder", fileNames, 0, 100) // sequence 0
+	require.NoError(t, err)
+
+	// node 0 publishes record
+	recordHash, err := nodes[0].PublishPointerRecord(record)
+	require.NoError(t, err)
+
+	time.Sleep(time.Second * 2)
+
+	// everyone can fetch pointer record
+	for i := range nodes {
+		fetchedRecord, ok := nodes[i].FetchPointerRecord(recordHash)
+		require.Equal(t, true, ok)
+		require.Equal(t, "", fetchedRecord.Value)
+		require.Equal(t, 5, len(fetchedRecord.Links))
+
+		// everyone can download file pointer inside folder of this record
+		newFetchedRecord, ok := nodes[i].FetchPointerRecord(fetchedRecord.Links[0])
+		require.Equal(t, true, ok)
+		require.Equal(t, false, nodes[i].IsFolderRecord(newFetchedRecord))
+		res, err := nodes[i].DownloadDHT(newFetchedRecord.Value)
+		require.NoError(t, err)
+		require.Equal(t, []byte("File 0 content"), res)
+
+		// everyone can access subfolders
+		fetchedFolder, ok := nodes[i].FetchPointerRecord(fetchedRecord.Links[2])
+		require.Equal(t, true, nodes[i].IsFolderRecord(fetchedFolder))
+		require.Equal(t, true, ok)
+		require.Equal(t, "", fetchedFolder.Value)
 	}
 }
 
@@ -278,7 +450,7 @@ func Test_MUTABLE_KademliaTagPointerRecord(t *testing.T) {
 
 	// node 0 generates pointer record
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	record, err := nodes[0].CreatePointerRecord(privateKey, mhB, 0, 100) // sequence 0
+	record, err := nodes[0].CreatePointerRecord(privateKey, "name", mhB, 0, 100) // sequence 0
 	require.NoError(t, err)
 	// node 0 publishes record
 	recordHash, err := nodes[0].PublishPointerRecord(record)
@@ -311,7 +483,7 @@ func Test_MUTABLE_KademliaTagPointerRecord(t *testing.T) {
 
 	// node 0 edits pointer record by creating a new pointer record using same private key
 	// note that only owner of private key can edit a record, otherwise validation will fail
-	editedRecord, err := nodes[0].CreatePointerRecord(privateKey, mhC, record.Sequence+1, 10)
+	editedRecord, err := nodes[0].CreatePointerRecord(privateKey, "name", mhC, record.Sequence+1, 10)
 	require.NoError(t, err)
 
 	// node 0 publishes upadted record
