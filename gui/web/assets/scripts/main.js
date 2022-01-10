@@ -24,6 +24,7 @@ const main = function () {
     application.register("search", Search);
     application.register("naming", Naming);
     application.register("browsewebsite", BrowseWebsite);
+    application.register("managewebsite", ManageWebsite);
 
     initCollapsible();
 };
@@ -862,6 +863,43 @@ class BrowseWebsite extends BaseElement {
             window.open((await resp.json())["redirect"])
         } catch (e) {
             this.flash.printError("failed to browse website: " + e);
+        }
+    }
+}
+
+class ManageWebsite extends BaseElement {
+    static get targets() {
+        return ["websiteName", "websiteContent"];
+    }
+
+    async create() {
+        const addr = this.peerInfo.getAPIURL("/website/manage");
+
+        const ok = this.checkInputs(this.websiteNameTarget, this.websiteContentTarget);
+        if (!ok) {
+            return;
+        }
+
+        const websiteName = this.websiteNameTarget.value;
+        const websiteContent = this.websiteContentTarget.files;
+
+        let formData = new FormData();
+        formData.append("Name", websiteName);
+        for (let i = 0, numFiles = websiteContent.length; i < numFiles; i++) {
+            const file = websiteContent[i];
+            formData.append("Files", file, file.webkitRelativePath);
+            formData.append("WK", file, file.webkitRelativePath);
+        }
+        const fetchArgs = {
+            method: "POST",
+            body: formData
+        };
+
+        try {
+            await this.fetch(addr, fetchArgs);
+            this.flash.printSuccess("create website done");
+        } catch (e) {
+            this.flash.printError("failed to create website: " + e);
         }
     }
 }

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -52,6 +53,36 @@ func (re *redirectServer) BrowseHandler() http.HandlerFunc {
 			http.Error(w, "forbidden method", http.StatusMethodNotAllowed)
 		}
 	}
+}
+
+func (re *redirectServer) CreateOrModifyHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			re.uploadWebsite(w, r)
+		case http.MethodOptions:
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Headers", "*")
+		default:
+			http.Error(w, "forbidden method", http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+func (re *redirectServer) uploadWebsite(w http.ResponseWriter, r *http.Request) {
+	err := r.ParseMultipartForm(1024 * 1024 * 16)
+	if err != nil {
+		http.Error(w, "failed to read body: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// TODO use CreateAndPublishFolderRecord to upload website and handle versioning for modifications
+	websiteName := r.MultipartForm.Value["Name"][0]
+	fmt.Println(websiteName)
+	for _, file := range r.MultipartForm.File["Files"] {
+		fmt.Println(file.Filename)
+	}
+	fmt.Println(r.MultipartForm.File["WK"])
 }
 
 // Start server to listen for redirect website
