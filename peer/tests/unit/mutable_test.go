@@ -245,6 +245,112 @@ func Test_MUTABLE_KademliaEditFileUnderPointerRecord(t *testing.T) {
 	}
 }
 
+func Test_MUTABLE_KademliaTagFolderUnderPointerRecord(t *testing.T) {
+	numNodes := uint(10)
+	if numNodes < 2 {
+		return
+	}
+
+	transp := channel.NewTransport()
+	nodes := make([]z.TestNode, numNodes)
+
+	for i := range nodes {
+		node := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithTotalPeers(numNodes))
+		defer node.Stop()
+
+		nodes[i] = node
+	}
+
+	// bootstrap all nodes
+	for i := uint(1); i < numNodes; i++ {
+		nodes[i].Bootstrap(nodes[0].GetAddr())
+	}
+	println("Bootstraped ", numNodes, " nodes")
+	time.Sleep(time.Second * 1)
+
+	fileNames := make([]string, 0)
+	// upload multiple files that will be in the folder
+	for i := 0; i < 2; i++ {
+		// node 0 uploads file
+		fileB := []byte(fmt.Sprintf("File %d content", i))
+		mhB, err := nodes[0].UploadDHT(bytes.NewBuffer(fileB))
+		require.NoError(t, err)
+
+		// node 0 generates pointer record
+		privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+		record, err := nodes[0].CreatePointerRecord(privateKey, mhB, 0, 100) // sequence 0
+		require.NoError(t, err)
+		// node 0 publishes record
+		recordHash, err := nodes[0].PublishPointerRecord(record)
+		require.NoError(t, err)
+
+		fileName := fmt.Sprintf("File%d", i)
+		err = nodes[0].Tag(fileName, recordHash)
+		require.NoError(t, err)
+		time.Sleep(time.Second * 2)
+		fileNames = append(fileNames, fileName)
+	}
+
+	// also add some subfolders
+	for i := 0; i < 3; i++ {
+		// node 0 generates pointer record
+		privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+		record, err := nodes[0].CreateFolderPointerRecord(privateKey, make([]string, 0), 0, 100) // sequence 0
+		require.NoError(t, err)
+		// node 0 publishes record
+		recordHash, err := nodes[0].PublishPointerRecord(record)
+		require.NoError(t, err)
+
+		folderName := fmt.Sprintf("Folder%d", i)
+		err = nodes[0].Tag(folderName, recordHash)
+		require.NoError(t, err)
+		time.Sleep(time.Second * 2)
+
+		fileNames = append(fileNames, folderName)
+	}
+
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	record, err := nodes[0].CreateFolderPointerRecord(privateKey, fileNames, 0, 100) // sequence 0
+	require.NoError(t, err)
+
+	// node 0 publishes record
+	recordHash, err := nodes[0].PublishPointerRecord(record)
+	require.NoError(t, err)
+
+	err = nodes[0].Tag("topFolder", recordHash)
+	require.NoError(t, err)
+	time.Sleep(time.Second * 5)
+
+	// everyone can fetch pointer record
+	for i := range nodes {
+		ad := nodes[i].Resolve("topFolder")
+		require.Equal(t, recordHash, ad)
+		fetchedRecord, ok := nodes[i].FetchPointerRecord(ad)
+		require.Equal(t, true, ok)
+		require.Equal(t, "", fetchedRecord.Value)
+		require.Equal(t, 5, len(fetchedRecord.Links))
+
+		// everyone can download file pointer inside folder of this record
+		addr := nodes[i].Resolve("File0")
+		newFetchedRecord, ok := nodes[i].FetchPointerRecord(addr)
+		require.Equal(t, true, ok)
+		require.Equal(t, false, nodes[i].IsFolderRecord(newFetchedRecord))
+		res, err := nodes[i].DownloadDHT(newFetchedRecord.Value)
+		require.NoError(t, err)
+		require.Equal(t, []byte("File 0 content"), res)
+
+		// everyone can access subfolders
+		addrFolder := nodes[i].Resolve("Folder0")
+		fetchedFolder, ok := nodes[i].FetchPointerRecord(addrFolder)
+		require.Equal(t, true, nodes[i].IsFolderRecord(fetchedFolder))
+		require.Equal(t, true, ok)
+		require.Equal(t, "", fetchedFolder.Value)
+	}
+}
+
 // upload file and pointer record associated with it, tag pointer record,
 // edit file and publish new pointer record under same address
 // fetch edited file under same address as before

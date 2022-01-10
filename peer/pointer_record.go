@@ -8,9 +8,12 @@ type PointerRecord struct {
 	TTL       uint
 	PublicKey *rsa.PublicKey
 	Signature []byte
+	Links     []string
 }
 
 type MutableRecord interface {
+	CreateFolderPointerRecord(privateKey *rsa.PrivateKey, links []string, sequence, ttl uint) (PointerRecord, error)
+
 	CreatePointerRecord(privateKey *rsa.PrivateKey, value string, sequence, ttl uint) (PointerRecord, error)
 
 	ValidatePointerRecord(record PointerRecord, publicKey *rsa.PublicKey) error
@@ -21,4 +24,6 @@ type MutableRecord interface {
 	// Fetches pointer record (from local store or from peers) associated with given hash and returns it.
 	// Returns error if record not found.
 	FetchPointerRecord(hash string) (PointerRecord, bool)
+
+	IsFolderRecord(record PointerRecord) bool
 }
