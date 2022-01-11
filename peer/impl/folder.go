@@ -66,7 +66,11 @@ func (n *node) ReconstructFolderFromRecord(basePath string, record peer.PointerR
 	if !n.IsFolderRecord(record) {
 		return "", fmt.Errorf("record should be a folder to reconstruct it")
 	}
-	err := os.Mkdir(filepath.Join(basePath, record.Name), 0777)
+	err := os.RemoveAll(filepath.Join(basePath, record.Name))
+	if err != nil {
+		return "", err
+	}
+	err = os.Mkdir(filepath.Join(basePath, record.Name), 0777)
 	if err != nil {
 		return "", err
 	}

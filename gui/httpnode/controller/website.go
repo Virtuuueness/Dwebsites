@@ -31,9 +31,6 @@ const hostURL = "http://localhost" + localPort + "/"
 const error404File = "web/404.html"
 
 func NewRedirectServer(peer peer.Peer, log *zerolog.Logger) redirectServer {
-	// Empty tmp/ folder
-	os.RemoveAll("tmp/")
-	os.MkdirAll("tmp/", os.ModePerm)
 	return redirectServer{
 		peer:       peer,
 		log:        log,
@@ -219,16 +216,16 @@ func (r *redirectServer) getWebsiteAndRedirectLinks(fullURL string) string {
 	}
 	// Last version is already in cache
 	if seq, ok := r.localCache[websiteName]; ok && seq == fetchedRecord.Sequence {
-		return filepath.Join("tmp", fullURL)
+		return filepath.Join(os.TempDir(), fullURL)
 	}
-	_, err = r.peer.ReconstructFolderFromRecord("tmp", fetchedRecord)
+	_, err = r.peer.ReconstructFolderFromRecord(os.TempDir(), fetchedRecord)
 	if err != nil {
 		r.log.Error().Msg("could not reconstruct folder from pointer: " + addr)
 		return error404File
 	}
 	decorateFolder(websiteName)
 	r.localCache[websiteName] = fetchedRecord.Sequence
-	return filepath.Join("tmp", fullURL)
+	return filepath.Join(os.TempDir(), fullURL)
 }
 
 // Decorate all HTML file in a folder by changing link to localhost redirect
