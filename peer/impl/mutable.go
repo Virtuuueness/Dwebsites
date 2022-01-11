@@ -112,3 +112,12 @@ func (n *node) FetchPointerRecord(hash string) (peer.PointerRecord, bool) {
 func (n *node) IsFolderRecord(record peer.PointerRecord) bool {
 	return record.Links != nil
 }
+
+func (n *node) SetRecordSignature(mh string, pKey *rsa.PrivateKey) {
+	n.localRecordKeys[mh] = pKey
+}
+
+func (n *node) GetRecordSignature(mh string) (*rsa.PrivateKey, bool) {
+	pKey, ok := n.localRecordKeys[mh]
+	return pKey, ok
+}

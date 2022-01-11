@@ -2,6 +2,7 @@ package impl
 
 import (
 	"crypto"
+	"crypto/rsa"
 	"crypto/sha1"
 	"math/big"
 
@@ -65,6 +66,7 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 		localHashMap:     SafeByteMap{byteMap: make(map[string][]byte)},
 		contactsChannels: ContactsChannels{channelsMap: make(map[string]chan *types.FindNodeReply)},
 		valueChannels:    ValueChannels{channelsMap: make(map[string]chan *types.FindValueReply)},
+		localRecordKeys:  make(map[string]*rsa.PrivateKey),
 	}
 
 	conf.MessageRegistry.RegisterMessageCallback(&types.ChatMessage{}, n.ChatMessageExec)
@@ -129,6 +131,7 @@ type node struct {
 	localHashMap     SafeByteMap
 	contactsChannels ContactsChannels
 	valueChannels    ValueChannels
+	localRecordKeys  map[string]*rsa.PrivateKey
 }
 
 // Broadcasts HeartbeatMessage at regular interval

@@ -879,6 +879,7 @@ class ManageWebsite extends BaseElement {
     }
 
     async create() {
+        this.flash.printSuccess("uploading site...");
         const addr = this.peerInfo.getAPIURL("/website/manage");
 
         const ok = this.checkInputs(this.websiteNameTarget, this.websiteContentTarget);

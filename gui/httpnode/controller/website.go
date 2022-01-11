@@ -80,6 +80,11 @@ func (re *redirectServer) uploadWebsite(w http.ResponseWriter, r *http.Request) 
 	}
 	websiteName := r.MultipartForm.Value["Name"][0]
 	rootPath := filepath.Join(os.TempDir(), websiteName)
+	err = os.RemoveAll(rootPath)
+	if err != nil {
+		http.Error(w, "failed to create top level folder: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	err = os.MkdirAll(rootPath, os.ModePerm)
 	if err != nil {
 		http.Error(w, "failed to create top level folder: "+err.Error(), http.StatusInternalServerError)
@@ -118,21 +123,42 @@ func (re *redirectServer) uploadWebsite(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	// TODO check whether record already exists and if that is the case just change the sequence (update)
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		http.Error(w, "failed to generate private key: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	recordHash, err := re.peer.CreateAndPublishFolderRecord(rootPath, websiteName, privateKey, 0, 100)
+	mh := re.peer.Resolve(websiteName)
+	shouldTag := true
+	sequence := uint(0)
+	if mh != "" {
+		if pKey, ok := re.peer.GetRecordSignature(mh); ok {
+			privateKey = pKey
+			shouldTag = false
+			fetchedRecord, ok2 := re.peer.FetchPointerRecord(mh)
+			if ok2 {
+				sequence = fetchedRecord.Sequence + 1
+			} else {
+				http.Error(w, "record linked to existing website not found", http.StatusInternalServerError)
+				return
+			}
+		} else {
+			http.Error(w, "website already exists and is not own by this user", http.StatusInternalServerError)
+			return
+		}
+	}
+	recordHash, err := re.peer.CreateAndPublishFolderRecord(rootPath, websiteName, privateKey, sequence, 100)
 	if err != nil {
 		http.Error(w, "failed to create and publish record: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	err = re.peer.Tag(websiteName, recordHash)
-	if err != nil {
-		http.Error(w, "failed to tag record: "+err.Error(), http.StatusInternalServerError)
-		return
+	if shouldTag {
+		err = re.peer.Tag(websiteName, recordHash)
+		if err != nil {
+			http.Error(w, "failed to tag record: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		re.peer.SetRecordSignature(recordHash, privateKey)
 	}
 }
 

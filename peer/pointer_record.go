@@ -35,4 +35,8 @@ type MutableRecord interface {
 
 	// Reconstruct the folder pointed at record in basePath folder
 	ReconstructFolderFromRecord(basePath string, record PointerRecord) (string, error)
+
+	SetRecordSignature(mh string, pKey *rsa.PrivateKey)
+
+	GetRecordSignature(mh string) (*rsa.PrivateKey, bool)
 }
