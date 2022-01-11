@@ -1,8 +1,10 @@
 package controller
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
-	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -76,13 +78,62 @@ func (re *redirectServer) uploadWebsite(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "failed to read body: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// TODO use CreateAndPublishFolderRecord to upload website and handle versioning for modifications
 	websiteName := r.MultipartForm.Value["Name"][0]
-	fmt.Println(websiteName)
-	for _, file := range r.MultipartForm.File["Files"] {
-		fmt.Println(file.Filename)
+	rootPath := filepath.Join(os.TempDir(), websiteName)
+	err = os.MkdirAll(rootPath, os.ModePerm)
+	if err != nil {
+		http.Error(w, "failed to create top level folder: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
-	fmt.Println(r.MultipartForm.File["WK"])
+	for _, fileHeader := range r.MultipartForm.File["Files"] {
+		file, err := fileHeader.Open()
+		if err != nil {
+			http.Error(w, "failed to read file: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer file.Close()
+		reg, _ := regexp.Compile(`filename="(.*)"`)
+		match := reg.FindStringSubmatch(fileHeader.Header.Get("Content-Disposition"))
+		if len(match) != 2 {
+			http.Error(w, "failed to read filename", http.StatusInternalServerError)
+			return
+		}
+		cleanPath := filepath.Clean(match[1])
+		splittedPath := strings.Split(cleanPath, "/")
+		splittedPath[0] = websiteName
+		path := filepath.Join(os.TempDir(), strings.Join(splittedPath, "/"))
+		err = os.MkdirAll(filepath.Dir(path), os.ModePerm)
+		if err != nil {
+			http.Error(w, "failed to create sub folder: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		out, err := os.Create(path)
+		if err != nil {
+			http.Error(w, "failed to create file on server: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_, err = io.Copy(out, file)
+		if err != nil {
+			http.Error(w, "failed to copy file on server: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	// TODO check whether record already exists and if that is the case just change the sequence (update)
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		http.Error(w, "failed to generate private key: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	recordHash, err := re.peer.CreateAndPublishFolderRecord(rootPath, websiteName, privateKey, 0, 100)
+	if err != nil {
+		http.Error(w, "failed to create and publish record: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	err = re.peer.Tag(websiteName, recordHash)
+	if err != nil {
+		http.Error(w, "failed to tag record: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 // Start server to listen for redirect website

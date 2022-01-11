@@ -888,7 +888,6 @@ class ManageWebsite extends BaseElement {
         for (let i = 0, numFiles = websiteContent.length; i < numFiles; i++) {
             const file = websiteContent[i];
             formData.append("Files", file, file.webkitRelativePath);
-            formData.append("WK", file, file.webkitRelativePath);
         }
         const fetchArgs = {
             method: "POST",
