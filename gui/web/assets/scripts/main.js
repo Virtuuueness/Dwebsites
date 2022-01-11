@@ -849,6 +849,12 @@ class BrowseWebsite extends BaseElement {
         
         const websiteName = this.websiteNameTarget.value;
 
+        let re = /(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]/;
+        if(!re.test(websiteName)) {
+            this.flash.printError(`form validation failed: "${websiteName}" is not a valid website url`);
+            return;
+        }
+
         const fetchArgs = {
             method: "POST",
             headers: {
@@ -882,6 +888,12 @@ class ManageWebsite extends BaseElement {
 
         const websiteName = this.websiteNameTarget.value;
         const websiteContent = this.websiteContentTarget.files;
+
+        let re = /(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]/;
+        if(!re.test(websiteName)) {
+            this.flash.printError(`form validation failed: "${websiteName}" is not a valid website url`);
+            return;
+        }
 
         let formData = new FormData();
         formData.append("Name", websiteName);

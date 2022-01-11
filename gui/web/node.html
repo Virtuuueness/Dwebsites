@@ -27,15 +27,17 @@
         </div>
     </div>
 
-    <div data-controller="managewebsite" class="naming">
+    <div data-controller="managewebsite" class="managewebsite">
         <h2 class="collapsible">Manage Website(s)</h2>
-        <div>
+        <div class="manage-website-form">
             <input data-managewebsite-target="websiteName" name="websiteName" type="text" placeholder="website name"/>
-            <input data-managewebsite-target="websiteContent" name="websiteContent" type="file" webkitdirectory directory />
-            <button data-action="click->managewebsite#create">
-                Create/Modify Website
-            </button>
-            <div style="color: gray; font-size: 80%;">Info: upload a single folder containing all files/subfolder of your website</div>
+            <div class="content">
+                <input data-managewebsite-target="websiteContent" name="websiteContent" type="file" webkitdirectory directory />
+                <button data-action="click->managewebsite#create">
+                    Create/Modify Website
+                </button>
+            </div>
+            <div style="color: gray; font-size: 80%;">Info: upload a single folder containing all files/subfolders of your website</div>
         </div>
     </div>
 
