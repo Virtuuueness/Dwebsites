@@ -193,16 +193,16 @@ func (r *redirectServer) getWebsiteAndRedirectLinks(fullURL string) string {
 	}
 	// Last version is already in cache
 	if seq, ok := r.localCache[websiteName]; ok && seq == fetchedRecord.Sequence {
-		return "tmp/" + fullURL
+		return filepath.Join("tmp", fullURL)
 	}
-	_, err = r.peer.ReconstructFolderFromRecord("tmp/", fetchedRecord)
+	_, err = r.peer.ReconstructFolderFromRecord("tmp", fetchedRecord)
 	if err != nil {
 		r.log.Error().Msg("could not reconstruct folder from pointer: " + addr)
 		return error404File
 	}
 	decorateFolder(websiteName)
 	r.localCache[websiteName] = fetchedRecord.Sequence
-	return "tmp/" + fullURL
+	return filepath.Join("tmp", fullURL)
 }
 
 // Decorate all HTML file in a folder by changing link to localhost redirect

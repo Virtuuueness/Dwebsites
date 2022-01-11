@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"math/big"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -270,19 +271,19 @@ func Test_MUTABLE_KademliaFolderPointerToReconstructFolder(t *testing.T) {
 	println("Bootstraped ", numNodes, " nodes")
 	time.Sleep(time.Second * 1)
 
-	tmpFolder := os.TempDir() + "/" + "tmpFolder/"
+	tmpFolder := filepath.Join(os.TempDir(), "tmpFolder")
 
 	err := os.RemoveAll(tmpFolder)
 	require.NoError(t, err)
 	err = os.Mkdir(tmpFolder, 0777)
 	require.NoError(t, err)
-	err = os.Mkdir(tmpFolder+"subfolder1", 0777)
+	err = os.Mkdir(filepath.Join(tmpFolder, "subfolder1"), 0777)
 	require.NoError(t, err)
-	err = os.Mkdir(tmpFolder+"subfolder2", 0777)
+	err = os.Mkdir(filepath.Join(tmpFolder, "subfolder2"), 0777)
 	require.NoError(t, err)
-	err = ioutil.WriteFile(tmpFolder+"test.txt", []byte("File test content"), 0666)
+	err = ioutil.WriteFile(filepath.Join(tmpFolder, "test.txt"), []byte("File test content"), 0666)
 	require.NoError(t, err)
-	err = ioutil.WriteFile(tmpFolder+"subfolder1/test2.txt", []byte("File test2 content"), 0666)
+	err = ioutil.WriteFile(filepath.Join(tmpFolder, "subfolder1", "test2.txt"), []byte("File test2 content"), 0666)
 	require.NoError(t, err)
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -295,7 +296,7 @@ func Test_MUTABLE_KademliaFolderPointerToReconstructFolder(t *testing.T) {
 	record, ok := nodes[0].FetchPointerRecord(recordHash)
 	require.Equal(t, true, ok)
 
-	tmpFolderResult := os.TempDir() + "/" + "tmpFolderResult/"
+	tmpFolderResult := filepath.Join(os.TempDir(), "tmpFolderResult")
 
 	err = os.RemoveAll(tmpFolderResult)
 	require.NoError(t, err)
@@ -303,20 +304,20 @@ func Test_MUTABLE_KademliaFolderPointerToReconstructFolder(t *testing.T) {
 	require.NoError(t, err)
 
 	nodes[0].ReconstructFolderFromRecord(tmpFolderResult, record)
-	_, err = os.Stat(tmpFolderResult + "tmpFolder")
+	_, err = os.Stat(filepath.Join(tmpFolderResult, "tmpFolder"))
 	require.Equal(t, nil, err)
-	_, err = os.Stat(tmpFolderResult + "tmpFolder/subfolder1")
+	_, err = os.Stat(filepath.Join(tmpFolderResult, "tmpFolder", "subfolder1"))
 	require.Equal(t, nil, err)
-	_, err = os.Stat(tmpFolderResult + "tmpFolder/subfolder2")
+	_, err = os.Stat(filepath.Join(tmpFolderResult, "tmpFolder", "subfolder2"))
 	require.Equal(t, nil, err)
-	_, err = os.Stat(tmpFolderResult + "tmpFolder/test.txt")
+	_, err = os.Stat(filepath.Join(tmpFolderResult, "tmpFolder", "test.txt"))
 	require.Equal(t, nil, err)
-	content, err := ioutil.ReadFile(tmpFolderResult + "tmpFolder/test.txt")
+	content, err := ioutil.ReadFile(filepath.Join(tmpFolderResult, "tmpFolder", "test.txt"))
 	require.Equal(t, nil, err)
 	require.Equal(t, "File test content", string(content))
-	_, err = os.Stat(tmpFolderResult + "tmpFolder/subfolder1/test2.txt")
+	_, err = os.Stat(filepath.Join(tmpFolderResult, "tmpFolder", "subfolder1", "test2.txt"))
 	require.Equal(t, nil, err)
-	content, err = ioutil.ReadFile(tmpFolderResult + "tmpFolder/subfolder1/test2.txt")
+	content, err = ioutil.ReadFile(filepath.Join(tmpFolderResult, "tmpFolder", "subfolder1", "test2.txt"))
 	require.Equal(t, nil, err)
 	require.Equal(t, "File test2 content", string(content))
 

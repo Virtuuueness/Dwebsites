@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 
 	"go.dedis.ch/cs438/peer"
 )
@@ -19,7 +20,7 @@ func (n *node) CreateAndPublishFolderRecord(path string, folderName string, priv
 	}
 	pointerRecordHashes := make([]string, 0)
 	for _, file := range files {
-		filePath := path + "/" + file.Name()
+		filePath := filepath.Join(path, file.Name())
 		privateKey2, err := rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
 			return "", err
@@ -65,7 +66,7 @@ func (n *node) ReconstructFolderFromRecord(basePath string, record peer.PointerR
 	if !n.IsFolderRecord(record) {
 		return "", fmt.Errorf("record should be a folder to reconstruct it")
 	}
-	err := os.Mkdir(basePath+"/"+record.Name, 0777)
+	err := os.Mkdir(filepath.Join(basePath, record.Name), 0777)
 	if err != nil {
 		return "", err
 	}
@@ -75,13 +76,13 @@ func (n *node) ReconstructFolderFromRecord(basePath string, record peer.PointerR
 			return "", fmt.Errorf("record not found: " + f)
 		}
 		if n.IsFolderRecord(fetchedRecord) {
-			n.ReconstructFolderFromRecord(basePath+"/"+record.Name, fetchedRecord)
+			n.ReconstructFolderFromRecord(filepath.Join(basePath, record.Name), fetchedRecord)
 		} else {
 			res, err := n.DownloadDHT(fetchedRecord.Value)
 			if err != nil {
 				return "", err
 			}
-			err = ioutil.WriteFile(basePath+"/"+record.Name+"/"+fetchedRecord.Name, res, 0666)
+			err = ioutil.WriteFile(filepath.Join(basePath, record.Name, fetchedRecord.Name), res, 0666)
 			if err != nil {
 				return "", err
 			}
