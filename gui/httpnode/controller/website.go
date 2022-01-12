@@ -223,7 +223,7 @@ func (r *redirectServer) getWebsiteAndRedirectLinks(fullURL string, hostUrl stri
 		r.log.Error().Msg("could not reconstruct folder from pointer: " + addr)
 		return error404File
 	}
-	decorateFolder(websiteName, hostUrl)
+	decorateFolder(filepath.Join(os.TempDir(), websiteName), hostUrl)
 	r.localCache[websiteName] = fetchedRecord.Sequence
 	return filepath.Join(os.TempDir(), fullURL)
 }
@@ -231,9 +231,10 @@ func (r *redirectServer) getWebsiteAndRedirectLinks(fullURL string, hostUrl stri
 // Decorate all HTML file in a folder by changing link to localhost redirect
 func decorateFolder(path string, hostUrl string) error {
 	var files []string
+	fmt.Println(path)
 	err := filepath.Walk(path,
 		func(path string, info os.FileInfo, err error) error {
-			if strings.HasSuffix(strings.ToLower(info.Name()), ".html") {
+			if info != nil && !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".html") {
 				files = append(files, path)
 			}
 			return err

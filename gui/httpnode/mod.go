@@ -53,7 +53,7 @@ type Proxy interface {
 }
 
 // NewHTTPNode return a proxy http.
-func NewHTTPNode(node peer.Peer, conf peer.Configuration) Proxy {
+func NewHTTPNode(node peer.Peer, conf peer.Configuration, nodes []peer.Peer) Proxy {
 	log := zerolog.New(logout).
 		Level(defaultLevel).
 		With().Timestamp().Logger().
@@ -102,11 +102,12 @@ func NewHTTPNode(node peer.Peer, conf peer.Configuration) Proxy {
 	mux.Handle("/", http.HandlerFunc(browseWebsitectrl.RedirectHandler()))
 
 	return &httpnode{
-		Peer: node,
-		conf: conf,
-		log:  &log,
-		mux:  mux,
-		quit: make(chan struct{}),
+		Peer:  node,
+		conf:  conf,
+		log:   &log,
+		mux:   mux,
+		quit:  make(chan struct{}),
+		nodes: nodes,
 	}
 }
 
@@ -118,6 +119,7 @@ type httpnode struct {
 	quit   chan struct{}
 	ln     net.Listener
 	mux    *http.ServeMux
+	nodes  []peer.Peer
 }
 
 // StartAndListen implements Proxy. It will start the node and the http server
@@ -127,6 +129,19 @@ func (h *httpnode) StartAndListen(proxyAddr string) error {
 	if err != nil {
 		return xerrors.Errorf("failed to start node: %v", err)
 	}
+
+	for _, n := range h.nodes {
+		err = n.Start()
+		if err != nil {
+			return xerrors.Errorf("failed to start node: %v", err)
+		}
+	}
+
+	// Bootstrap to current node
+	for _, n := range h.nodes {
+		n.Bootstrap(h.conf.Socket.GetAddress())
+	}
+	time.Sleep(time.Second * 1)
 
 	peerAddr := h.conf.Socket.GetAddress()
 	newLog := h.log.With().Str("peerAddr", peerAddr).Logger()
@@ -146,6 +161,13 @@ func (h *httpnode) StopAndClose() error {
 	err := h.Peer.Stop()
 	if err != nil {
 		return xerrors.Errorf("failed to close stop node: %v", err)
+	}
+
+	for _, n := range h.nodes {
+		err = n.Stop()
+		if err != nil {
+			return xerrors.Errorf("failed to close stop node: %v", err)
+		}
 	}
 
 	h.log.Info().Msg("node stopped")

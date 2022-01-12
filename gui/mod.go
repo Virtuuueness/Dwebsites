@@ -16,6 +16,7 @@ import (
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/peer/impl"
 	"go.dedis.ch/cs438/registry/standard"
+	"go.dedis.ch/cs438/transport"
 
 	"go.dedis.ch/cs438/storage"
 	"go.dedis.ch/cs438/storage/file"
@@ -184,51 +185,19 @@ func start(c *urfave.Context) error {
 		return xerrors.Errorf("failed to write socket address file: %v", err)
 	}
 
-	var storage storage.Storage
-
-	if c.String("storagefolder") == "" {
-		storage = inmemory.NewPersistency()
-	} else {
-		storage, err = file.NewPersistency(c.String("storagefolder"))
-		if err != nil {
-			log.Fatal().Msgf("failed to create file storage: %v", err)
-		}
+	numNodes := uint(10)
+	pId := uint(0)
+	nodes := make([]peer.Peer, numNodes)
+	for i := range nodes {
+		pId += 1
+		conf := confFactory(c, trans, numNodes, pId)
+		node := peerFactory(conf)
+		nodes[i] = node
 	}
-	totalPeers := c.Uint("totalpeers")
-	paxosID := c.Uint("paxosid")
-
-	if totalPeers > 1 && paxosID == 0 {
-		return xerrors.Errorf("if total peers is set PaxosID must be set, too")
-	}
-
-	conf := peer.Configuration{
-		Socket:          sock,
-		MessageRegistry: standard.NewRegistry(),
-
-		AntiEntropyInterval: c.Duration("antientropy"),
-		HeartbeatInterval:   c.Duration("heartbeat"),
-		AckTimeout:          c.Duration("acktimeout"),
-		ContinueMongering:   c.Float64("continuemongering"),
-
-		ChunkSize: c.Uint("chunksize"),
-		BackoffDataRequest: peer.Backoff{
-			Initial: c.Duration("backoffinitial"),
-			Factor:  c.Uint("backofffactor"),
-			Retry:   c.Uint("backoffretry"),
-		},
-		Storage: storage,
-
-		TotalPeers: totalPeers,
-		PaxosThreshold: func(u uint) int {
-			return int(u/2 + 1)
-		},
-		PaxosID:            paxosID,
-		PaxosProposerRetry: c.Duration("paxosproposerretry"),
-	}
-
+	conf := confFactory(c, trans, numNodes, 0)
 	node := peerFactory(conf)
 
-	httpnode := httpnode.NewHTTPNode(node, conf)
+	httpnode := httpnode.NewHTTPNode(node, conf, nodes)
 
 	notify := make(chan os.Signal, 1)
 	signal.Notify(notify,
@@ -255,4 +224,38 @@ func start(c *urfave.Context) error {
 	sock.Close()
 
 	return nil
+}
+
+func confFactory(c *urfave.Context, trans transport.Transport, numNodes uint, paxosID uint) peer.Configuration {
+	sock, _ := trans.CreateSocket(c.String("nodeaddr"))
+	var storage storage.Storage
+	if c.String("storagefolder") == "" {
+		storage = inmemory.NewPersistency()
+	} else {
+		storage, _ = file.NewPersistency(c.String("storagefolder"))
+	}
+	return peer.Configuration{
+		Socket:          sock,
+		MessageRegistry: standard.NewRegistry(),
+
+		AntiEntropyInterval: c.Duration("antientropy"),
+		HeartbeatInterval:   c.Duration("heartbeat"),
+		AckTimeout:          c.Duration("acktimeout"),
+		ContinueMongering:   c.Float64("continuemongering"),
+
+		ChunkSize: c.Uint("chunksize"),
+		BackoffDataRequest: peer.Backoff{
+			Initial: c.Duration("backoffinitial"),
+			Factor:  c.Uint("backofffactor"),
+			Retry:   c.Uint("backoffretry"),
+		},
+		Storage: storage,
+
+		TotalPeers: numNodes,
+		PaxosThreshold: func(u uint) int {
+			return int(u/2 + 1)
+		},
+		PaxosID:            paxosID,
+		PaxosProposerRetry: c.Duration("paxosproposerretry"),
+	}
 }
