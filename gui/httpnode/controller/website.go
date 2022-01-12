@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -22,12 +23,9 @@ import (
 type redirectServer struct {
 	peer       peer.Peer
 	log        *zerolog.Logger
-	isRunning  bool
 	localCache map[string]uint
 }
 
-const localPort = ":8080"
-const hostURL = "http://localhost" + localPort + "/"
 const error404File = "web/404.html"
 
 func NewRedirectServer(peer peer.Peer, log *zerolog.Logger) redirectServer {
@@ -43,7 +41,6 @@ func (re *redirectServer) BrowseHandler() http.HandlerFunc {
 		switch r.Method {
 		case http.MethodPost:
 			w.Header().Set("Access-Control-Allow-Origin", "*")
-			re.startRedirectServer()
 			re.respondRedirectUrl(w, r)
 		case http.MethodOptions:
 			w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -60,6 +57,23 @@ func (re *redirectServer) CreateOrModifyHandler() http.HandlerFunc {
 		case http.MethodPost:
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			re.uploadWebsite(w, r)
+		case http.MethodOptions:
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Headers", "*")
+		default:
+			http.Error(w, "forbidden method", http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+func (re *redirectServer) RedirectHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			fullURL := r.URL.Path[1:]
+			// Get site's folder (either locally or remote and serve the right file)
+			http.ServeFile(w, r, re.getWebsiteAndRedirectLinks(fullURL, fmt.Sprintf("http://%s/", r.Host)))
 		case http.MethodOptions:
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Headers", "*")
@@ -159,20 +173,6 @@ func (re *redirectServer) uploadWebsite(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// Start server to listen for redirect website
-func (re *redirectServer) startRedirectServer() {
-	if !re.isRunning {
-		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			fullURL := r.URL.Path[1:]
-			// Get site's folder (either locally or remote and serve the right file)
-			http.ServeFile(w, r, re.getWebsiteAndRedirectLinks(fullURL))
-		})
-		re.log.Info().Msg("starting server at port " + localPort + "\n")
-		go http.ListenAndServe(localPort, nil)
-		re.isRunning = true
-	}
-}
-
 func (re *redirectServer) respondRedirectUrl(w http.ResponseWriter, r *http.Request) {
 	resp := make(map[string]string)
 	buf, err := ioutil.ReadAll(r.Body)
@@ -187,7 +187,7 @@ func (re *redirectServer) respondRedirectUrl(w http.ResponseWriter, r *http.Requ
 			http.StatusInternalServerError)
 		return
 	}
-	resp["redirect"] = hostURL + res.WebsiteName
+	resp["redirect"] = fmt.Sprintf("http://%s/%s", r.Host, res.WebsiteName)
 	jsonResp, err := json.Marshal(resp)
 	if err != nil {
 		re.log.Fatal().Msgf("error happened in JSON marshal. Err: %s", err)
@@ -196,7 +196,7 @@ func (re *redirectServer) respondRedirectUrl(w http.ResponseWriter, r *http.Requ
 }
 
 // Get files remotely and decorate local folder's links or from cache if same version than peerster
-func (r *redirectServer) getWebsiteAndRedirectLinks(fullURL string) string {
+func (r *redirectServer) getWebsiteAndRedirectLinks(fullURL string, hostUrl string) string {
 	// Extract domain name to get site's folder
 	reg, err := regexp.Compile(`(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]`)
 	if err != nil || !reg.MatchString(fullURL) {
@@ -223,13 +223,13 @@ func (r *redirectServer) getWebsiteAndRedirectLinks(fullURL string) string {
 		r.log.Error().Msg("could not reconstruct folder from pointer: " + addr)
 		return error404File
 	}
-	decorateFolder(websiteName)
+	decorateFolder(websiteName, hostUrl)
 	r.localCache[websiteName] = fetchedRecord.Sequence
 	return filepath.Join(os.TempDir(), fullURL)
 }
 
 // Decorate all HTML file in a folder by changing link to localhost redirect
-func decorateFolder(path string) error {
+func decorateFolder(path string, hostUrl string) error {
 	var files []string
 	err := filepath.Walk(path,
 		func(path string, info os.FileInfo, err error) error {
@@ -242,13 +242,13 @@ func decorateFolder(path string) error {
 		return err
 	}
 	for _, f := range files {
-		decorateHTML(f)
+		decorateHTML(f, hostUrl)
 	}
 	return nil
 }
 
 // Decorate the HTML file at path with redirected links to localhost
-func decorateHTML(path string) error {
+func decorateHTML(path string, hostUrl string) error {
 	text, err := fileToString(path)
 	if err != nil {
 		return err
@@ -257,7 +257,7 @@ func decorateHTML(path string) error {
 	if err != nil {
 		return err
 	}
-	return stringToFile(path, replaceLinks(text, links))
+	return stringToFile(path, replaceLinks(text, links, hostUrl))
 }
 
 func fileToString(path string) (string, error) {
@@ -273,14 +273,14 @@ func stringToFile(path string, content string) error {
 }
 
 // Replace all links (currentUrls) in inputContent with localhost redirected one
-func replaceLinks(inputContent string, currentUrls []string) string {
+func replaceLinks(inputContent string, currentUrls []string, hostUrl string) string {
 	var replaceArr []string
 	for _, c := range currentUrls {
 		replaceArr = append(replaceArr, c)
 		if c[:5] == "https" {
-			replaceArr = append(replaceArr, hostURL+c[8:])
+			replaceArr = append(replaceArr, hostUrl+c[8:])
 		} else if c[:4] == "http" {
-			replaceArr = append(replaceArr, hostURL+c[7:])
+			replaceArr = append(replaceArr, hostUrl+c[7:])
 		} else {
 			replaceArr = append(replaceArr, c)
 		}
