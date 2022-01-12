@@ -3,7 +3,6 @@ package controller
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -14,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog"
-	"go.dedis.ch/cs438/gui/httpnode/types"
 	"go.dedis.ch/cs438/peer"
 
 	"golang.org/x/net/html"
@@ -33,21 +31,6 @@ func NewRedirectServer(peer peer.Peer, log *zerolog.Logger) redirectServer {
 		peer:       peer,
 		log:        log,
 		localCache: make(map[string]uint),
-	}
-}
-
-func (re *redirectServer) BrowseHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			re.respondRedirectUrl(w, r)
-		case http.MethodOptions:
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Headers", "*")
-		default:
-			http.Error(w, "forbidden method", http.StatusMethodNotAllowed)
-		}
 	}
 }
 
@@ -71,7 +54,7 @@ func (re *redirectServer) RedirectHandler() http.HandlerFunc {
 		switch r.Method {
 		case http.MethodGet:
 			w.Header().Set("Access-Control-Allow-Origin", "*")
-			fullURL := r.URL.Path[1:]
+			fullURL := strings.TrimPrefix(r.URL.Path[1:], "www.")
 			// Get site's folder (either locally or remote and serve the right file)
 			http.ServeFile(w, r, re.getWebsiteAndRedirectLinks(fullURL, fmt.Sprintf("http://%s/", r.Host)))
 		case http.MethodOptions:
@@ -89,7 +72,7 @@ func (re *redirectServer) uploadWebsite(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "failed to read body: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	websiteName := r.MultipartForm.Value["Name"][0]
+	websiteName := strings.TrimPrefix(r.MultipartForm.Value["Name"][0], "www.")
 	rootPath := filepath.Join(os.TempDir(), websiteName)
 	err = os.RemoveAll(rootPath)
 	if err != nil {
@@ -173,28 +156,6 @@ func (re *redirectServer) uploadWebsite(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (re *redirectServer) respondRedirectUrl(w http.ResponseWriter, r *http.Request) {
-	resp := make(map[string]string)
-	buf, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "failed to read body: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	res := types.BrowseRequest{}
-	err = json.Unmarshal(buf, &res)
-	if err != nil {
-		http.Error(w, "failed to unmarshal browseWebsite: "+err.Error(),
-			http.StatusInternalServerError)
-		return
-	}
-	resp["redirect"] = fmt.Sprintf("http://%s/%s", r.Host, res.WebsiteName)
-	jsonResp, err := json.Marshal(resp)
-	if err != nil {
-		re.log.Fatal().Msgf("error happened in JSON marshal. Err: %s", err)
-	}
-	w.Write(jsonResp)
-}
-
 // Get files remotely and decorate local folder's links or from cache if same version than peerster
 func (r *redirectServer) getWebsiteAndRedirectLinks(fullURL string, hostUrl string) string {
 	// Extract domain name to get site's folder
@@ -231,7 +192,6 @@ func (r *redirectServer) getWebsiteAndRedirectLinks(fullURL string, hostUrl stri
 // Decorate all HTML file in a folder by changing link to localhost redirect
 func decorateFolder(path string, hostUrl string) error {
 	var files []string
-	fmt.Println(path)
 	err := filepath.Walk(path,
 		func(path string, info os.FileInfo, err error) error {
 			if info != nil && !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".html") {

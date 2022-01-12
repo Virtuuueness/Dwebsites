@@ -70,7 +70,6 @@ func NewHTTPNode(node peer.Peer, conf peer.Configuration, nodes []peer.Peer) Pro
 	datasharingctrl := controller.NewDataSharing(node, &log)
 	blockchain := controller.NewBlockchain(conf, &log)
 
-	mux.Handle("/website/browse", http.HandlerFunc(browseWebsitectrl.BrowseHandler()))
 	mux.Handle("/website/manage", http.HandlerFunc(browseWebsitectrl.CreateOrModifyHandler()))
 
 	mux.Handle("/messaging/peers", http.HandlerFunc(messagingctrl.PeerHandler()))

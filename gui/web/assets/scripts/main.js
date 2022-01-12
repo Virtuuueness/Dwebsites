@@ -841,7 +841,6 @@ class BrowseWebsite extends BaseElement {
     }
 
     async browse() {
-        const addr = this.peerInfo.getAPIURL("/website/browse");
         const ok = this.checkInputs(this.websiteNameTarget);
         if (!ok) {
             return;
@@ -855,21 +854,8 @@ class BrowseWebsite extends BaseElement {
             return;
         }
 
-        const fetchArgs = {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({"WebsiteName": websiteName})
-        };
-
-        try {
-            const resp = await this.fetch(addr, fetchArgs);
-            this.flash.printSuccess("browse website done");
-            window.open((await resp.json())["redirect"])
-        } catch (e) {
-            this.flash.printError("failed to browse website: " + e);
-        }
+        const addr = this.peerInfo.getAPIURL("/" + websiteName);
+        window.open(addr);
     }
 }
 
