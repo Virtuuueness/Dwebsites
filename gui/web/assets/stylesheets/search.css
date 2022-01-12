@@ -18,3 +18,7 @@ div.search div.search-all-result {
 div.search div.search-first-result {
     font-family: 'Courier New', Courier, monospace;
 }
+
+div.search div.search-engine-result {
+    font-family: 'Courier New', Courier, monospace;
+}

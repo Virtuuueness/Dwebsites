@@ -1,0 +1,60 @@
+ <!DOCTYPE html>
+<html>
+<head>
+    <title>CS438 - DWebsite</title>
+    <link rel="stylesheet" href="assets/stylesheets/main.css">
+    <meta charset="UTF-8">
+</head>
+<body>
+
+    <div data-controller="flash" id="flash" class="flash">
+        <div data-flash-target="wrapper" id="flash-wrapper">
+        </div>
+    </div>
+
+    <h1>DWebsite <sup>EPFL - DEDIS - CS438</sup></h1>
+    <table data-controller="peerInfo" id="peerInfo" class="peer-info">
+        <tr><td>Proxy address</td><td data-peerInfo-target="peerAddr"></td></tr>
+        <tr><td>Socket address</td><td data-peerInfo-target="socketAddr"></td></tr>
+    </table>
+
+
+    <div data-controller="search" class="search">
+        <h2>Search</h2>
+
+            
+            <input data-search-target="searchEnginePattern" name="pattern" type="type" placeholder="pattern (.*)">
+            <input data-search-target="searchEngineBudget" name="budget" type="number" placeholder="budget (3)">
+            <input data-search-target="searchEngineTimeout" name="timeout" type="type" placeholder="timeout (1s)">
+            <div class="checkbox">
+                <input data-search-target="searchEngineContent" type="checkbox" id="content-checkbox" checked>
+                <label for="content-checkbox">search in content</label>
+            </div>
+
+            <button data-action="click->search#searchEngine">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M24 10h-10v-10h-4v10h-10v4h10v10h4v-10h10z"/></svg>
+                Search
+            </button>
+
+            <table>
+                <thead>
+                    <th>Name</th>
+                    <th>Rank</th>
+                </thead>
+                <tbody data-search-target="searchEngineResult">
+                </tbody>
+            </table>
+
+        
+    </div>
+
+    
+    <script src="assets/scripts/stimulus.js"></script>
+    <script src="assets/scripts/viz.js"></script>
+    <script src="assets/scripts/viz.lite.render.js"></script>
+    <script src="assets/scripts/main.js"></script>
+    <script type="text/javascript">
+        main() // launch javascript when ready
+    </script>
+</body>
+</html>

@@ -4,6 +4,7 @@ import (
 	"crypto"
 	"crypto/sha1"
 	"math/big"
+	"sort"
 
 	"encoding/hex"
 	"errors"
@@ -65,6 +66,35 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 		localHashMap:     SafeByteMap{byteMap: make(map[string][]byte)},
 		contactsChannels: ContactsChannels{channelsMap: make(map[string]chan *types.FindNodeReply)},
 		valueChannels:    ValueChannels{channelsMap: make(map[string]chan *types.FindValueReply)},
+
+		// Page rank
+		pageRank: pageRank{nodes: make(map[string]struct{}),
+			incommingLinks:      make(map[string][]string),
+			nbOfOutcommingLinks: make(map[string]int)},
+		pageRankRanking:          ranking{ranking: make(map[string]float64)},
+		pageRankAcceptedProposal: AcceptedProposal{acceptedID: 0, acceptedValue: nil},
+		pageRankcurrStep:         SafeUint{val: 0},
+		pageRankProposer: Proposer{
+			currID:                        0,
+			promiseThresholdReached:       make(chan bool, 10),
+			acceptThresholdReached:        make(chan types.PaxosValue, 10), //PageRankPaosValue casted into PaxosValue to avoid useless code duplication
+			isListeningToAcceptThreshold:  false,
+			isListeningToPromiseThreshold: false,
+			paxosPhase:                    0,
+			recvPromises:                  0,
+			highestAcceptID:               0,
+			highestAcceptVal:              nil,
+			acceptedVals:                  make(map[string]*Set),
+			tlcBroadcasted:                false,
+		},
+		pageRankTlcCount:         PageRankTlcCounter{counter: make(map[uint][]*types.PageRankTLCMessage)}, //PageRankTLCMessage casted into TLCMessage to avoid useless code duplication
+		pageRankBlocked:          SafeBool{val: false},
+		pageRankConsensusReached: SafeBool{val: false},
+		pageRankChan:             make(chan types.PageRankPaxosValue),
+		pageRankMaxID:            SafeUint{val: 0},
+
+		//Search Engine
+		searchEngineResponseStorage: SearchEngineResponseStorage{responses: make(map[string]map[string]struct{})},
 	}
 
 	conf.MessageRegistry.RegisterMessageCallback(&types.ChatMessage{}, n.ChatMessageExec)
@@ -91,6 +121,17 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	conf.MessageRegistry.RegisterMessageCallback(&types.FindValueReply{}, n.FindValueReplyExec)
 	conf.MessageRegistry.RegisterMessageCallback(&types.FindValueRequest{}, n.FindValueRequestExec)
 	conf.MessageRegistry.RegisterMessageCallback(&types.StoreRequest{}, n.StoreRequestExec)
+
+	// PageRank
+	conf.MessageRegistry.RegisterMessageCallback(&types.PageRankPaxosPrepareMessage{}, n.PageRankPaxosPrepareMessageExec)
+	conf.MessageRegistry.RegisterMessageCallback(&types.PageRankPaxosProposeMessage{}, n.PageRankPaxosProposeMessageExec)
+	conf.MessageRegistry.RegisterMessageCallback(&types.PageRankPaxosPromiseMessage{}, n.PageRankPaxosPromiseMessageExec)
+	conf.MessageRegistry.RegisterMessageCallback(&types.PageRankPaxosAcceptMessage{}, n.PageRankPaxosAcceptMessageExec)
+	conf.MessageRegistry.RegisterMessageCallback(&types.PageRankTLCMessage{}, n.PageRankTLCMessageExec)
+
+	// SearchEngine
+	conf.MessageRegistry.RegisterMessageCallback(&types.SearchEngineReplyMessage{}, n.SearchEngineReplyMessageExec)
+	conf.MessageRegistry.RegisterMessageCallback(&types.SearchEngineRequestMessage{}, n.SearchEngineRequestMessageExec)
 
 	return n
 }
@@ -129,6 +170,21 @@ type node struct {
 	localHashMap     SafeByteMap
 	contactsChannels ContactsChannels
 	valueChannels    ValueChannels
+
+	// PageRank
+	pageRank                 pageRank
+	pageRankRanking          ranking
+	pageRankcurrStep         SafeUint
+	pageRankAcceptedProposal AcceptedProposal
+	pageRankProposer         Proposer
+	pageRankTlcCount         PageRankTlcCounter
+	pageRankBlocked          SafeBool
+	pageRankChan             chan types.PageRankPaxosValue
+	pageRankConsensusReached SafeBool
+	pageRankMaxID            SafeUint
+
+	// SearchEngine
+	searchEngineResponseStorage SearchEngineResponseStorage
 }
 
 // Broadcasts HeartbeatMessage at regular interval
@@ -870,4 +926,218 @@ func (n *node) SearchFirst(pattern regexp.Regexp, conf peer.ExpandingRing) (stri
 	}
 
 	return name, nil
+}
+
+func (n *node) AddLink(from string, to string) error {
+	// Link already in the graph
+	if n.pageRank.LinkAlreadyExist(from, to) {
+		return nil
+	}
+
+	n.pageRankBlocked.Set(true)
+
+	// If only one node
+	if n.conf.TotalPeers <= 1 {
+		//Add new link to graph and compute ranking
+		n.pageRank.AddLink(from, to)
+		n.pageRankRanking.Lock()
+		n.pageRankRanking.ranking = n.pageRank.Rank()
+		n.pageRankRanking.Unlock()
+		return nil
+	}
+
+PAXOS:
+	prepareID := n.conf.PaxosID
+	var acceptedVal types.PaxosValue
+
+PAXOS_LOOP:
+	for {
+		// PAXOS PHASE 1 //
+		// Broadcast PaxosPrepareMessage
+		prepareMsg := types.PageRankPaxosPrepareMessage{
+			Step:   n.pageRankcurrStep.Get(),
+			ID:     prepareID,
+			Source: n.conf.Socket.GetAddress(),
+		}
+		transportPrepareMsg, err := n.conf.MessageRegistry.MarshalMessage(prepareMsg)
+		if err != nil {
+			return err
+		}
+		err = n.Broadcast(transportPrepareMsg)
+		if err != nil {
+			return err
+		}
+
+		ticker := time.NewTicker(n.conf.PaxosProposerRetry)
+		n.pageRankProposer.SetPhase(1) // listen to Promise msgs
+		n.pageRankProposer.SetCurrID(prepareID)
+
+		n.pageRankProposer.SetListeningToPromiseThreshold(true)
+		select {
+		case <-n.pageRankProposer.promiseThresholdReached:
+			n.pageRankProposer.SetPhase(0) // ignore Promise/Accept msgs
+			n.pageRankProposer.SetListeningToPromiseThreshold(false)
+			ticker.Stop()
+		case <-ticker.C:
+			n.pageRankProposer.SetPhase(0) // ignore Promise/Accept msgs
+			n.pageRankProposer.SetListeningToPromiseThreshold(false)
+			ticker.Stop()
+			prepareID += n.conf.TotalPeers
+			n.pageRankProposer.ResetRecvPromises()
+			continue
+		}
+
+		// PAXOS PHASE 2 //
+
+		// Broadcast PaxosProposeMessage
+		paxosValue := types.PageRankPaxosValue{
+			UniqID: xid.New().String(),
+			From:   from,
+			To:     to,
+		}
+
+		n.pageRankProposer.Lock()
+		if n.pageRankProposer.highestAcceptVal != nil {
+
+			//Casting into PageRankpaxosValue
+			paxosValue = types.PageRankPaxosValue{
+				UniqID: n.pageRankProposer.highestAcceptVal.UniqID,
+				From:   n.pageRankProposer.highestAcceptVal.Filename,
+				To:     n.pageRankProposer.highestAcceptVal.Metahash,
+			}
+		}
+		n.pageRankProposer.Unlock()
+
+		proposeMsg := types.PageRankPaxosProposeMessage{
+			Step:  n.pageRankcurrStep.Get(),
+			ID:    prepareID,
+			Value: paxosValue,
+		}
+		transportProposeMsg, err := n.conf.MessageRegistry.MarshalMessage(proposeMsg)
+		if err != nil {
+			return err
+		}
+
+		err = n.Broadcast(transportProposeMsg)
+		if err != nil {
+			return err
+		}
+
+		ticker = time.NewTicker(n.conf.PaxosProposerRetry)
+		n.pageRankProposer.SetPhase(2) // listen to Accept msgs
+		n.pageRankProposer.SetListeningToAcceptThreshold(true)
+
+		select {
+		case acceptedVal = <-n.pageRankProposer.acceptThresholdReached:
+			n.pageRankProposer.SetPhase(0) // ignore Promise/Accept msgs
+			n.pageRankProposer.SetListeningToAcceptThreshold(false)
+			ticker.Stop()
+			break PAXOS_LOOP // CONSENSUS REACHED
+		case <-ticker.C:
+			n.pageRankProposer.SetPhase(0) // ignore Promise/Accept msgs
+			n.pageRankProposer.SetListeningToAcceptThreshold(false)
+			ticker.Stop()
+			prepareID += n.conf.TotalPeers
+		}
+	}
+	// Consensus reached //
+
+	n.pageRankProposer.ResetHighestAcceptVal()
+	n.acceptedProposal.SetAccepted(0, nil)
+	n.pageRankProposer.SetPhase(0)
+
+	<-n.pageRankChan
+	if acceptedVal.Filename != from || acceptedVal.Metahash != to {
+		goto PAXOS
+	}
+
+	n.pageRankBlocked.Set(false)
+
+	return nil
+}
+
+func (n *node) SearchEngineSeach(reg regexp.Regexp, budget uint, timeout time.Duration, contentSearch bool) (peer.PairList, error) {
+
+	var peers []string
+
+	if n.peers.Len() > int(budget) {
+		peers = n.peers.GetNRandomPeers(int(budget), NewSet())
+	} else {
+		peers = n.peers.GetAllPeers(NewSet())
+	}
+
+	var wg sync.WaitGroup
+
+	leftPeers := len(peers)
+	leftBudget := budget
+	requestID := xid.New().String()
+
+	for _, peer := range peers {
+		peerBudget := leftBudget / uint(leftPeers)
+		if peerBudget == 0 {
+			continue
+		}
+
+		req := types.SearchEngineRequestMessage{
+			RequestID:     requestID,
+			Origin:        n.conf.Socket.GetAddress(),
+			Pattern:       reg.String(),
+			ContentSearch: contentSearch,
+			Budget:        peerBudget}
+
+		wg.Add(1)
+		go func(peer string, req types.SearchEngineRequestMessage) {
+			defer wg.Done()
+
+			err := n.DirectSend(peer, req)
+			if err != nil {
+				log.Error().Msgf("[peer.Peer.SearchEngineSearch] Send to peer error>: <%s>", err.Error())
+			}
+
+			timer := time.NewTimer(timeout)
+			<-timer.C // wait full timeout
+			timer.Stop()
+		}(peer, req)
+
+		leftPeers--
+		leftBudget -= peerBudget
+	}
+
+	wg.Wait()
+
+	responses := n.searchEngineResponseStorage.GetResponses(requestID)
+
+	if responses != nil {
+		pairlist := make(peer.PairList, len(responses))
+
+		n.pageRankRanking.Lock()
+		defer n.pageRankRanking.Unlock()
+		i := 0
+		for website, _ := range responses {
+			_, ok := n.pageRankRanking.ranking[website]
+			rank := 0.0
+			if ok {
+				rank = n.pageRankRanking.ranking[website]
+			}
+			pairlist[i] = peer.Pair{Key: website, Value: rank}
+			i++
+		}
+
+		sort.Sort(pairlist)
+
+		return pairlist, nil
+	}
+
+	return nil, nil
+}
+
+func (n *node) GetRanking() map[string]float64 {
+	n.pageRankRanking.Lock()
+	defer n.pageRankRanking.Unlock()
+
+	copy := make(map[string]float64, len(n.pageRankRanking.ranking))
+	for k, v := range n.pageRankRanking.ranking {
+		copy[k] = v
+	}
+	return copy
 }

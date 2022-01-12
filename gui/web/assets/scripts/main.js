@@ -681,9 +681,60 @@ class DataSharing extends BaseElement {
 
 class Search extends BaseElement {
     static get targets() {
-        return ["searchAllResult", "searchAllPattern", "searchAllBudget", "searchAllTimeout",
+        return ["searchEngineResult", "searchEnginePattern", "searchEngineBudget", "searchEngineTimeout", "searchEngineContent",
+            "searchAllResult", "searchAllPattern", "searchAllBudget", "searchAllTimeout",
             "searchFirstResult", "searchFirstPattern", "searchFirstInitialBudget",
             "searchFirstFactor", "searchFirstRetry", "searchFirstTimeout"];
+    }
+
+    async searchEngine() {
+        const addr = this.peerInfo.getAPIURL("/datasharing/searchEngine");
+
+        const ok = this.checkInputs(this.searchEnginePatternTarget,
+            this.searchEngineBudgetTarget, this.searchEngineTimeoutTarget, this.searchEngineContentTarget);
+        if (!ok) {
+            return;
+        }
+
+        const pattern = this.searchEnginePatternTarget.value;
+        const budget = this.searchEngineBudgetTarget.value;
+        const timeout = this.searchEngineTimeoutTarget.value;
+        const content = this.searchEngineContentTarget.checked;
+
+        const pkt = {
+            "Pattern": pattern,
+            "Budget": parseInt(budget),
+            "Timeout": timeout,
+            "Content": content
+        };
+
+        const fetchArgs = {
+            method: "POST",
+            headers: {
+                "Content-Type": "multipart/form-data"
+            },
+            body: JSON.stringify(pkt)
+        };
+
+        try {
+            const resp = await this.fetch(addr, fetchArgs);
+            const data = await resp.json();
+
+            this.searchEngineResultTarget.innerHTML = "";
+
+            for (const [name, rank] of Object.entries(data)) {
+                const el = document.createElement("tr");
+
+                el.innerHTML = `<td>${name}</td><td>${rank}</td>`;
+                this.searchEngineResultTarget.appendChild(el);
+            }
+
+            this.flash.printSuccess("Search done");
+
+        } catch (e) {
+            this.flash.printError("Failed to search: " + e);
+        }
+
     }
 
     async searchAll() {

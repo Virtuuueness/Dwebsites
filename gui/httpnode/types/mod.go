@@ -35,3 +35,11 @@ type SearchArgument struct {
 	Retry   uint
 	Timeout string
 }
+
+// IndexArgument is the json type to call datasharing.SearchAndIndex()
+type SearchEngineArgument struct {
+	Pattern string
+	Budget  uint
+	Timeout string
+	Content bool
+}

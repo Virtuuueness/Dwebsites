@@ -100,6 +100,20 @@ func (d datasharing) SearchAllHandler() http.HandlerFunc {
 	}
 }
 
+func (d datasharing) SearchEngineHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			d.searchEnginePost(w, r)
+		case http.MethodOptions:
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Headers", "*")
+		default:
+			http.Error(w, "forbidden method", http.StatusMethodNotAllowed)
+		}
+	}
+}
+
 func (d datasharing) SearchFirstHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -266,6 +280,61 @@ func (d datasharing) indexPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	names, err := d.node.SearchAll(*regex, arguments.Budget, wait)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to index: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	js, err := json.Marshal(&names)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to marshal names: %v", err),
+			http.StatusInternalServerError)
+		return
+	}
+
+	w.Write(js)
+}
+
+// type SearchEngineArgument struct {
+// 	Pattern string
+// 	Budget  uint
+// 	Timeout string
+// 	Content bool
+// }
+func (d datasharing) searchEnginePost(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	fmt.Printf("\"here\": %v\n", "here")
+	buf, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to read body: %v", err),
+			http.StatusInternalServerError)
+		return
+	}
+
+	arguments := types.SearchEngineArgument{}
+	err = json.Unmarshal(buf, &arguments)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to unmarshal arguments: %v", err),
+			http.StatusInternalServerError)
+		return
+	}
+
+	regex, err := regexp.Compile(arguments.Pattern)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to parse regex: %v", err),
+			http.StatusBadRequest)
+		return
+	}
+
+	wait, err := time.ParseDuration(arguments.Timeout)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to parse wait: %v", err),
+			http.StatusBadRequest)
+		return
+	}
+
+	names, err := d.node.SearchEngineSeach(*regex, arguments.Budget, wait, arguments.Content)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to index: %v", err), http.StatusBadRequest)
 		return

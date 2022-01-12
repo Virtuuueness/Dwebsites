@@ -66,6 +66,20 @@ type DataSharing interface {
 	// SearchReplyMessages received. Returns an empty string if nothing was
 	// found.
 	SearchFirst(pattern regexp.Regexp, conf ExpandingRing) (name string, err error)
+
+	// SearchAll returns all the names that exist matching the given regex. It
+	// merges results from the local storage and from the search request reply
+	// sent to a random neighbor using the provided budget. It makes the peer
+	// update its catalog and name storage according to the SearchReplyMessages
+	// received. Returns an empty result if nothing found. An error is returned
+	// in case of an exceptional event.
+	//
+	// - Implemented in HW2
+	SearchEngineSeach(reg regexp.Regexp, budget uint, timeout time.Duration, contentSearch bool) (PairList, error)
+
+	AddLink(from, to string) error
+
+	GetRanking() map[string]float64
 }
 
 // Catalog tells, for a given piece of data referenced by a key, a bag of peers
@@ -96,4 +110,23 @@ type ExpandingRing struct {
 
 	// Timeout before retrying when no response received.
 	Timeout time.Duration
+}
+
+/*  ========= Pair ============= */
+//For pagerank sorting
+type Pair struct {
+	Key   string
+	Value float64
+}
+
+type PairList []Pair
+
+func (p PairList) Len() int      { return len(p) }
+func (p PairList) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
+func (p PairList) Less(i, j int) bool {
+	if p[i].Value != p[j].Value {
+		return p[i].Value > p[j].Value
+	} else {
+		return p[i].Key < p[j].Key
+	}
 }

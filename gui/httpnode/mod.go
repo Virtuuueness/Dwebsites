@@ -92,6 +92,8 @@ func NewHTTPNode(node peer.Peer, conf peer.Configuration) Proxy {
 	mux.Handle("/datasharing/catalog", http.HandlerFunc(datasharingctrl.CatalogHandler()))
 	mux.Handle("/datasharing/searchAll", http.HandlerFunc(datasharingctrl.SearchAllHandler()))
 	mux.Handle("/datasharing/searchFirst", http.HandlerFunc(datasharingctrl.SearchFirstHandler()))
+	//Search Engine
+	mux.Handle("/datasharing/searchEngine", http.HandlerFunc(datasharingctrl.SearchEngineHandler()))
 
 	mux.Handle("/blockchain", http.HandlerFunc(blockchain.BlockchainHandler()))
 

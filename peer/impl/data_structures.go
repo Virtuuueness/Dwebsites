@@ -491,6 +491,42 @@ func (c *TlcCounter) Delete(step uint) {
 	delete(c.counter, step)
 }
 
+/* ========= PageRankTlcCounter ============= */
+type PageRankTlcCounter struct {
+	sync.Mutex
+	counter map[uint][]*types.PageRankTLCMessage
+}
+
+func (c *PageRankTlcCounter) Append(step uint, msg *types.PageRankTLCMessage) {
+	c.Lock()
+	c.counter[step] = append(c.counter[step], msg)
+	c.Unlock()
+}
+
+func (c *PageRankTlcCounter) Len(step uint) int {
+	c.Lock()
+	defer c.Unlock()
+	return len(c.counter[step])
+}
+
+// returns representative element and length of list
+func (c *PageRankTlcCounter) Get(step uint) (*types.PageRankTLCMessage, int) {
+	c.Lock()
+	defer c.Unlock()
+	len := len(c.counter[step])
+	if len > 0 {
+		return c.counter[step][0], len
+	}
+
+	return nil, len
+}
+
+func (c *PageRankTlcCounter) Delete(step uint) {
+	c.Lock()
+	defer c.Unlock()
+	delete(c.counter, step)
+}
+
 /* ========= AcceptedProposal ============= */
 type AcceptedProposal struct {
 	sync.Mutex
@@ -552,4 +588,32 @@ func (p *SafeBool) Get() bool {
 	p.Lock()
 	defer p.Unlock()
 	return p.val
+}
+
+/*  ========= SearchEngineResponseStorage ============= */
+
+type SearchEngineResponseStorage struct {
+	sync.Mutex
+	responses map[string]map[string]struct{}
+}
+
+func (s *SearchEngineResponseStorage) AddResponses(requestID string, res []string) {
+	s.Lock()
+	defer s.Unlock()
+
+	for _, website := range res {
+		s.responses[requestID][website] = struct{}{}
+	}
+}
+
+func (s *SearchEngineResponseStorage) GetResponses(requestID string) map[string]struct{} {
+	s.Lock()
+	defer s.Unlock()
+	_, ok := s.responses[requestID]
+
+	if ok {
+		return s.responses[requestID]
+	} else {
+		return nil
+	}
 }

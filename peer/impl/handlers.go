@@ -595,3 +595,329 @@ func (n *node) TLCMessageExec(msg types.Message, pkt transport.Packet) error {
 
 	return nil
 }
+
+func (n *node) PageRankPaxosPrepareMessageExec(msg types.Message, pkt transport.Packet) error {
+	prepareMsg, ok := msg.(*types.PageRankPaxosPrepareMessage)
+	if !ok {
+		return fmt.Errorf("wrong type: %T", msg)
+	}
+	if prepareMsg.Step != n.pageRankcurrStep.Get() || prepareMsg.ID <= n.pageRankMaxID.Get() {
+		return nil // ignore
+	}
+
+	// Promise
+	n.pageRankMaxID.Set(prepareMsg.ID)
+
+	acceptedID, acceptedVal := n.pageRankAcceptedProposal.GetAccepted()
+	promiseMsg := types.PageRankPaxosPromiseMessage{
+		Step:          n.pageRankcurrStep.Get(),
+		ID:            prepareMsg.ID,
+		AcceptedID:    acceptedID,
+		AcceptedValue: nil, //Cast
+	}
+	if acceptedVal != nil {
+		promiseMsg = types.PageRankPaxosPromiseMessage{
+			Step:          n.pageRankcurrStep.Get(),
+			ID:            prepareMsg.ID,
+			AcceptedID:    acceptedID,
+			AcceptedValue: &types.PageRankPaxosValue{UniqID: acceptedVal.UniqID, From: acceptedVal.Filename, To: acceptedVal.Metahash}, //Cast
+		}
+
+	}
+	// send PaxosPromiseMessage to source using private broadcast
+	transportPromise, err := n.conf.MessageRegistry.MarshalMessage(promiseMsg)
+	if err != nil {
+		return err
+	}
+	privateMsg := types.PrivateMessage{
+		Recipients: NewSet(prepareMsg.Source).Get(),
+		Msg:        &transportPromise,
+	}
+	transportPrivate, err := n.conf.MessageRegistry.MarshalMessage(privateMsg)
+	if err != nil {
+		return err
+	}
+
+	return n.Broadcast(transportPrivate)
+}
+
+func (n *node) PageRankPaxosProposeMessageExec(msg types.Message, pkt transport.Packet) error {
+	proposeMsg, ok := msg.(*types.PageRankPaxosProposeMessage)
+	if !ok {
+		return fmt.Errorf("wrong type: %T", msg)
+	}
+
+	if proposeMsg.Step != n.pageRankcurrStep.Get() || proposeMsg.ID != n.pageRankMaxID.Get() {
+		return nil
+	}
+
+	// Accept
+	n.acceptedProposal.SetAccepted(proposeMsg.ID,
+		&types.PaxosValue{UniqID: proposeMsg.Value.UniqID, Filename: proposeMsg.Value.From, Metahash: proposeMsg.Value.To}) //Casting
+
+	// broadcast PaxosAcceptMessage
+	acceptMsg := types.PageRankPaxosAcceptMessage{
+		Step:  n.pageRankcurrStep.Get(),
+		ID:    proposeMsg.ID,
+		Value: proposeMsg.Value,
+	}
+	transportAccept, err := n.conf.MessageRegistry.MarshalMessage(acceptMsg)
+	if err != nil {
+		return err
+	}
+	return n.Broadcast(transportAccept)
+}
+
+func (n *node) PageRankPaxosPromiseMessageExec(msg types.Message, pkt transport.Packet) error {
+	promiseMsg, ok := msg.(*types.PageRankPaxosPromiseMessage)
+	if !ok {
+		return fmt.Errorf("wrong type: %T", msg)
+	}
+
+	n.pageRankProposer.Lock()
+
+	if promiseMsg.Step != n.pageRankcurrStep.Get() || n.pageRankProposer.paxosPhase != 1 || n.pageRankProposer.currID != promiseMsg.ID {
+		n.pageRankProposer.Unlock()
+		return nil // ignore
+	}
+
+	n.pageRankProposer.recvPromises++
+
+	if promiseMsg.AcceptedValue != nil && promiseMsg.AcceptedID > n.pageRankProposer.highestAcceptID {
+		n.pageRankProposer.highestAcceptID = promiseMsg.AcceptedID
+		n.pageRankProposer.highestAcceptVal = &types.PaxosValue{UniqID: promiseMsg.AcceptedValue.UniqID, Filename: promiseMsg.AcceptedValue.From, Metahash: promiseMsg.AcceptedValue.To} //Casting
+	}
+
+	if n.pageRankProposer.recvPromises >= uint(n.conf.PaxosThreshold(n.conf.TotalPeers)) &&
+		n.pageRankProposer.isListeningToPromiseThreshold {
+		n.pageRankProposer.Unlock()
+		n.pageRankProposer.promiseThresholdReached <- true // threshold reached
+	} else {
+		n.pageRankProposer.Unlock()
+	}
+
+	return nil
+}
+
+func (n *node) PageRankPaxosAcceptMessageExec(msg types.Message, pkt transport.Packet) error {
+	acceptMsg, ok := msg.(*types.PageRankPaxosAcceptMessage)
+	if !ok {
+		return fmt.Errorf("wrong type: %T", msg)
+	}
+
+	if n.pageRankConsensusReached.Get() {
+		return nil
+	}
+	n.pageRankProposer.Lock()
+
+	if acceptMsg.Step != n.pageRankcurrStep.Get() || n.pageRankProposer.paxosPhase == 1 {
+		n.pageRankProposer.Unlock()
+		return nil // ignore
+	}
+
+	if n.pageRankProposer.acceptedVals[acceptMsg.Value.UniqID] == nil {
+		n.pageRankProposer.acceptedVals[acceptMsg.Value.UniqID] = NewSet()
+	}
+	n.pageRankProposer.acceptedVals[acceptMsg.Value.UniqID].Add(pkt.Header.Source)
+
+	reached := false
+	if n.pageRankProposer.acceptedVals[acceptMsg.Value.UniqID].Len() >= n.conf.PaxosThreshold(n.conf.TotalPeers) {
+		n.pageRankConsensusReached.Set(true)
+		reached = true
+		if n.pageRankProposer.isListeningToAcceptThreshold {
+			n.pageRankProposer.Unlock()
+			n.pageRankProposer.acceptThresholdReached <- types.PaxosValue{UniqID: acceptMsg.Value.UniqID, Filename: acceptMsg.Value.From, Metahash: acceptMsg.Value.To} // consensus reached + casting
+		} else {
+			n.pageRankProposer.Unlock()
+		}
+	} else {
+		n.pageRankProposer.Unlock()
+	}
+
+	time.Sleep(time.Second)
+
+	if reached && !n.pageRankProposer.IsTlcBroadcasted() {
+		var prevBlock types.PageRankBlockchainBlock
+		prevBlock.Hash = n.conf.Storage.GetPageRankBlockchainStore().Get(storage.LastBlockKey)
+		if prevBlock.Hash == nil {
+			prevBlock.Hash = make([]byte, 32)
+		}
+
+		// Create block
+		block := types.PageRankBlockchainBlock{
+			Index:    n.pageRankcurrStep.Get(),
+			Hash:     nil,
+			Value:    acceptMsg.Value,
+			PrevHash: prevBlock.Hash,
+		}
+
+		blockConcat := append([]byte(strconv.Itoa(int(block.Index))), []byte(block.Value.UniqID)...)
+		blockConcat = append(blockConcat, []byte(block.Value.From)...)
+		blockConcat = append(blockConcat, []byte(block.Value.To)...)
+		blockConcat = append(blockConcat, block.PrevHash...)
+
+		h := crypto.SHA256.New()
+		_, err := h.Write([]byte(blockConcat))
+		if err != nil {
+			return err
+		}
+		block.Hash = h.Sum(nil)
+
+		// Broadcast PageRankTLCMessage
+		tlcMsg := types.PageRankTLCMessage{
+			Step:  acceptMsg.Step,
+			Block: block,
+		}
+		transportTlcMsg, err := n.conf.MessageRegistry.MarshalMessage(tlcMsg)
+		if err != nil {
+			return err
+		}
+
+		n.pageRankProposer.SetTlcBroadcasted(true)
+		err = n.Broadcast(transportTlcMsg)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (n *node) PageRankTLCMessageExec(msg types.Message, pkt transport.Packet) error {
+	tlcMsg, ok := msg.(*types.PageRankTLCMessage)
+	if !ok {
+		return fmt.Errorf("wrong type: %T", msg)
+	}
+
+	n.pageRankTlcCount.Append(tlcMsg.Step, tlcMsg)
+
+	if tlcMsg.Step < n.pageRankcurrStep.Get() || n.tlcCount.Len(tlcMsg.Step) > n.conf.PaxosThreshold(n.conf.TotalPeers) {
+		return nil
+	}
+
+	if tlcMsg.Step == n.pageRankcurrStep.Get() {
+		for {
+			representativeTlcMsg, len := n.pageRankTlcCount.Get(n.pageRankcurrStep.Get())
+			if len >= n.conf.PaxosThreshold(n.conf.TotalPeers) && representativeTlcMsg.Step == n.pageRankcurrStep.Get() {
+				// threshold reached for current Step
+
+				n.pageRankcurrStep.Increment() // increase TLC step
+				IsTlcBroadcasted := n.pageRankProposer.IsTlcBroadcasted()
+				n.pageRankProposer.SetTlcBroadcasted(false)
+				n.pageRankMaxID.Set(0)
+				n.pageRankAcceptedProposal.SetAccepted(0, nil)
+				n.pageRankConsensusReached.Set(false)
+
+				log.Info().Msgf("[%s][PageRankTLCMessageExec] Increased PageRankTLC Step: %d", n.conf.Socket.GetAddress(), n.pageRankcurrStep.Get())
+
+				buf, err := representativeTlcMsg.Block.Marshal()
+				if err != nil {
+					return err
+				}
+
+				// add to blockchain
+				n.conf.Storage.GetPageRankBlockchainStore().Set(hex.EncodeToString(representativeTlcMsg.Block.Hash), buf)
+				n.conf.Storage.GetPageRankBlockchainStore().Set(storage.LastBlockKey, representativeTlcMsg.Block.Hash)
+
+				// Add new Link and compute new ranking
+				n.pageRank.AddLink(representativeTlcMsg.Block.Value.From, representativeTlcMsg.Block.Value.To)
+				n.pageRankRanking.Lock()
+				n.pageRankRanking.ranking = n.pageRank.Rank()
+				n.pageRankRanking.Unlock()
+
+				// broadcast TLC if it hasn't yet been broadcasted
+				if !IsTlcBroadcasted {
+					transportTlcMsg, err := n.conf.MessageRegistry.MarshalMessage(representativeTlcMsg)
+					if err != nil {
+						return err
+					}
+					err = n.Broadcast(transportTlcMsg)
+					if err != nil {
+						return err
+					}
+				}
+				n.pageRankProposer.ResetHighestAcceptVal()
+
+				if n.pageRankBlocked.Get() {
+					n.pageRankChan <- representativeTlcMsg.Block.Value
+				}
+			} else {
+				break
+			}
+		}
+	}
+
+	return nil
+}
+
+func (n *node) SearchEngineReplyMessageExec(msg types.Message, pkt transport.Packet) error {
+	reply, ok := msg.(*types.SearchEngineReplyMessage)
+	if !ok {
+		return fmt.Errorf("wrong type: %T", msg)
+	}
+
+	n.searchEngineResponseStorage.AddResponses(reply.RequestID, reply.Responses)
+
+	return nil
+}
+
+func (n *node) SearchEngineRequestMessageExec(msg types.Message, pkt transport.Packet) error {
+	req, ok := msg.(*types.SearchEngineRequestMessage)
+	if !ok {
+		return fmt.Errorf("wrong type: %T", msg)
+	}
+
+	go func() { // forward request
+		// decrease budget
+		req.Budget--
+		if req.Budget == 0 {
+			return
+		}
+
+		// get random peers
+		var peers []string
+		if n.peers.Len() > int(req.Budget) {
+			peers = n.peers.GetNRandomPeers(int(req.Budget), NewSet(pkt.Header.Source))
+		} else {
+			peers = n.peers.GetAllPeers(NewSet(pkt.Header.Source))
+		}
+
+		leftPeers := len(peers)
+		leftBudget := req.Budget
+
+		// divide budget and send to each peer
+		for _, peer := range peers {
+			peerBudget := leftBudget / uint(leftPeers)
+			if peerBudget == 0 {
+				continue
+			}
+
+			req.Budget = peerBudget
+			err := n.DirectSend(peer, req)
+			if err != nil {
+				log.Error().Msgf("[SearchRequestMessageExec] Forward search request error>: <%s>", err.Error())
+			}
+		}
+	}()
+
+	// process localy
+	// reg := regexp.MustCompile(req.Pattern)
+
+	var responses []string
+
+	// TODO Compute responses from local website data
+
+	if req.ContentSearch {
+		// TODO also add regex match from content
+	}
+
+	// send reply
+	reply := types.SearchEngineReplyMessage{RequestID: req.RequestID, Responses: responses}
+	transportReply, err := n.conf.MessageRegistry.MarshalMessage(reply)
+	if err != nil {
+		return err
+	}
+	header := transport.NewHeader(n.conf.Socket.GetAddress(), n.conf.Socket.GetAddress(), req.Origin, 0)
+	replyPkt := transport.Packet{Header: &header, Msg: &transportReply}
+	return n.conf.Socket.Send(pkt.Header.Source, replyPkt, n.socketTimeout)
+}
