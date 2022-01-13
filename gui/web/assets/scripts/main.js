@@ -722,14 +722,21 @@ class Search extends BaseElement {
 
             this.searchEngineResultTarget.innerHTML = "";
 
-            for (const [name, rank] of Object.entries(data)) {
-                const el = document.createElement("tr");
-
-                el.innerHTML = `<td>${name}</td><td>${rank}</td>`;
-                this.searchEngineResultTarget.appendChild(el);
+            if (data == null) {
+                this.flash.printSuccess("Search done, no results");
             }
+            else{
 
-            this.flash.printSuccess("Search done");
+                
+                for (const [i, o] of Object.entries(data)) {
+                    const el = document.createElement("tr");
+                    
+                    el.innerHTML = `<td> <a href=${o.Key}>${o.Key}</a> </td><td>${o.Value}</td>`;
+                    this.searchEngineResultTarget.appendChild(el);
+                }
+                
+                this.flash.printSuccess("Search done");
+            }
 
         } catch (e) {
             this.flash.printError("Failed to search: " + e);
