@@ -2,6 +2,7 @@ package impl
 
 import (
 	"crypto"
+	"crypto/rsa"
 	"crypto/sha1"
 	"math/big"
 	"sort"
@@ -95,6 +96,7 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 
 		//Search Engine
 		searchEngineResponseStorage: SearchEngineResponseStorage{responses: make(map[string]map[string]struct{})},
+		localRecordKeys:             make(map[string]*rsa.PrivateKey),
 	}
 
 	conf.MessageRegistry.RegisterMessageCallback(&types.ChatMessage{}, n.ChatMessageExec)
@@ -185,6 +187,7 @@ type node struct {
 
 	// SearchEngine
 	searchEngineResponseStorage SearchEngineResponseStorage
+	localRecordKeys             map[string]*rsa.PrivateKey
 }
 
 // Broadcasts HeartbeatMessage at regular interval

@@ -1,0 +1,43 @@
+div.browsewebsite {
+    padding: 30px 10px 10px 10px;
+    max-width: 500px;
+    margin: auto;
+    max-height: 400px;
+    overflow: auto;
+}
+
+div.browsewebsite .browse-form {
+    padding: 20px 0 0 0;
+}
+
+div.browsewebsite input:focus{
+    outline: 0;
+}
+
+div.browsewebsite .browse-form .browse {
+    display: flex;
+    flex-direction: row;
+}
+
+div.browsewebsite .browse-form .browse input {
+    flex: 1;
+    padding: 10px;
+
+    border: 2px solid #eee;
+    border-radius: 0 0 0 5px;
+    border-color: transparent transparent #eee #eee;
+}
+
+div.browsewebsite .browse-form .browse button {
+    padding: 3px 10px;
+
+    border: 2px solid #eee;
+    border: none;
+
+    cursor: pointer;
+}
+
+div.browsewebsite .browse-form .browse button:hover {
+    background: rgb(6,137,243);
+    color: #fff;
+}

@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
+
 	"go.dedis.ch/cs438/peer"
 )
 
@@ -16,12 +17,22 @@ import (
 // 	return n.CreatePointerRecord(privateKey, newValue, record.Sequence+1, newTtl)
 // }
 
-func (n *node) CreatePointerRecord(privateKey *rsa.PrivateKey, value string, sequence, ttl uint) (peer.PointerRecord, error) {
+func (n *node) CreateFolderPointerRecord(privateKey *rsa.PrivateKey, name string, links []string, sequence, ttl uint) (peer.PointerRecord, error) {
+	return n.createPointer(privateKey, name, "", links, sequence, ttl)
+}
+
+func (n *node) CreatePointerRecord(privateKey *rsa.PrivateKey, name string, value string, sequence, ttl uint) (peer.PointerRecord, error) {
+	return n.createPointer(privateKey, name, value, nil, sequence, ttl)
+}
+
+func (n *node) createPointer(privateKey *rsa.PrivateKey, name string, value string, links []string, sequence, ttl uint) (peer.PointerRecord, error) {
 	var record peer.PointerRecord
+	record.Name = name
 	record.Value = value
 	record.Sequence = sequence
 	record.TTL = ttl
 	record.PublicKey = &privateKey.PublicKey
+	record.Links = links
 
 	byteRecord, err := json.Marshal(record)
 	if err != nil {
@@ -96,4 +107,17 @@ func (n *node) FetchPointerRecord(hash string) (peer.PointerRecord, bool) {
 		return record, true
 	}
 	return record, false
+}
+
+func (n *node) IsFolderRecord(record peer.PointerRecord) bool {
+	return record.Links != nil
+}
+
+func (n *node) SetRecordSignature(mh string, pKey *rsa.PrivateKey) {
+	n.localRecordKeys[mh] = pKey
+}
+
+func (n *node) GetRecordSignature(mh string) (*rsa.PrivateKey, bool) {
+	pKey, ok := n.localRecordKeys[mh]
+	return pKey, ok
 }

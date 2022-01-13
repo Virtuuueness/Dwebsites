@@ -1,0 +1,54 @@
+div.managewebsite {
+    padding: 30px 10px 10px 10px;
+    max-width: 500px;
+    margin: auto;
+    max-height: 400px;
+    overflow: auto;
+}
+
+div.managewebsite .manage-website-form {
+    padding: 20px 0 0 0;
+}
+
+div.managewebsite input:focus, div.managewebsite input:focus{
+    outline: 0;
+}
+
+div.managewebsite .manage-website-form input {
+    width: 100%;
+    resize: none;
+    /* height: 80px; */
+    padding: 10px;
+
+    border: 2px solid #eee;
+    border-radius: 5px 5px 0 0;
+}
+
+div.managewebsite .manage-website-form .content {
+    display: flex;
+    flex-direction: row;
+}
+
+div.managewebsite .manage-website-form .content input {
+    flex: 1;
+    padding: 10px;
+
+    border: 2px solid #eee;
+    border-radius: 0 0 0 5px;
+    border-color: transparent transparent #eee #eee;
+}
+
+div.managewebsite .manage-website-form .content button {
+    padding: 3px 10px;
+
+    border: 2px solid #eee;
+    border-radius: 0 0 20px 0;
+    border: none;
+
+    cursor: pointer;
+}
+
+div.managewebsite .manage-website-form .content button:hover {
+    background: rgb(6,137,243);
+    color: #fff;
+}

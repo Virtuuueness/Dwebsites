@@ -4,6 +4,10 @@ import (
 	"go.dedis.ch/cs438/transport"
 )
 
+type BrowseRequest struct {
+	WebsiteName string
+}
+
 // AddPeerArgument is the json type to call messaging.AddPeer()
 type AddPeerArgument []string
 

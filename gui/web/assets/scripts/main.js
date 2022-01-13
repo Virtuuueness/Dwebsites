@@ -23,6 +23,8 @@ const main = function () {
     application.register("dataSharing", DataSharing);
     application.register("search", Search);
     application.register("naming", Naming);
+    application.register("browsewebsite", BrowseWebsite);
+    application.register("managewebsite", ManageWebsite);
 
     initCollapsible();
 };
@@ -887,6 +889,73 @@ class Naming extends BaseElement {
             this.flash.printSuccess("tagging done");
         } catch (e) {
             this.flash.printError("failed to tag filename: " + e);
+        }
+    }
+}
+
+class BrowseWebsite extends BaseElement {
+    static get targets() {
+        return ["websiteName"];
+    }
+
+    async browse() {
+        const ok = this.checkInputs(this.websiteNameTarget);
+        if (!ok) {
+            return;
+        }
+        
+        const websiteName = this.websiteNameTarget.value;
+
+        let re = /(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]/;
+        if(!re.test(websiteName)) {
+            this.flash.printError(`form validation failed: "${websiteName}" is not a valid website url`);
+            return;
+        }
+
+        const addr = this.peerInfo.getAPIURL("/" + websiteName);
+        window.open(addr);
+    }
+}
+
+class ManageWebsite extends BaseElement {
+    static get targets() {
+        return ["websiteName", "websiteContent"];
+    }
+
+    async create() {
+        this.flash.printSuccess("uploading site...");
+        const addr = this.peerInfo.getAPIURL("/website/manage");
+
+        const ok = this.checkInputs(this.websiteNameTarget, this.websiteContentTarget);
+        if (!ok) {
+            return;
+        }
+
+        const websiteName = this.websiteNameTarget.value;
+        const websiteContent = this.websiteContentTarget.files;
+
+        let re = /(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]/;
+        if(!re.test(websiteName)) {
+            this.flash.printError(`form validation failed: "${websiteName}" is not a valid website url`);
+            return;
+        }
+
+        let formData = new FormData();
+        formData.append("Name", websiteName);
+        for (let i = 0, numFiles = websiteContent.length; i < numFiles; i++) {
+            const file = websiteContent[i];
+            formData.append("Files", file, file.webkitRelativePath);
+        }
+        const fetchArgs = {
+            method: "POST",
+            body: formData
+        };
+
+        try {
+            await this.fetch(addr, fetchArgs);
+            this.flash.printSuccess("create website done");
+        } catch (e) {
+            this.flash.printError("failed to create website: " + e);
         }
     }
 }
