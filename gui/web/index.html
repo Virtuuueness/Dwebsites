@@ -8,14 +8,10 @@
 <body>
     <div>
         <h1>Enter the peer's proxy address</h1>
-        <form action="node.html" method="get">
-            <input name="addr" type="text" id="addr" placeholder="127.0.0.1:0"/><input type="submit" value="let's go" />
-        </form>
-    </div>
-    <div>
-        <h1>Enter the peer's proxy address Search</h1>
-        <form action="searchPage.html" method="get">
-            <input name="addr" type="text" id="addr" placeholder="127.0.0.1:0"/><input type="submit" value="let's go" />
+        <form method="get">
+            <input name="addr" type="text" id="addr" placeholder="127.0.0.1:0"/>
+            <input type="submit" onclick="javascript: form.action='node.html';" value="Modify Node" />
+            <input type="submit" onclick="javascript: form.action='website.html';" value="DWebsites" />
         </form>
     </div>
 </body>
