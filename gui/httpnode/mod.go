@@ -71,6 +71,7 @@ func NewHTTPNode(node peer.Peer, conf peer.Configuration, nodes []peer.Peer) Pro
 	blockchain := controller.NewBlockchain(conf, &log)
 
 	mux.Handle("/website/manage", http.HandlerFunc(browseWebsitectrl.CreateOrModifyHandler()))
+	mux.Handle("/website/cache", http.HandlerFunc(browseWebsitectrl.CacheHandler()))
 
 	mux.Handle("/messaging/peers", http.HandlerFunc(messagingctrl.PeerHandler()))
 	mux.Handle("/messaging/routing", http.HandlerFunc(messagingctrl.RoutingHandler()))

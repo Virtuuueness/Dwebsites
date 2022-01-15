@@ -6,13 +6,34 @@ import (
 )
 
 type KademliaDHT interface {
+	// Stores given key/value pair
 	Store(key string, value []byte)
+
+	// Finds value in DHT associated with given key
+	// - a value is a list of nodes which contain data associated with given key, in a form
+	// of a string where addresses are seperated with MetaFileSep
 	FindValue(key string) ([]byte, bool)
+
+	// Finds K-Closest nodes to given key
 	FindNode(key string) []types.Contact
+
+	// Pings given node
 	Ping(dest string)
+
+	// Bootstraps node so they can exchange DHT messages
 	Bootstrap(peer string)
+
+	// Stores given data localy, and updates DHT with appropriate info
 	UploadDHT(data io.Reader) (metahash string, err error)
-	DownloadDHT(metahash string) ([]byte, error)
+
+	// Downloads data associated with given metahash from the DHT
+	DownloadDHT(metahash string, keep bool) ([]byte, error)
+
+	// Used for benchmarking
+	GetReqCnt() uint64
+
+	// Used for benchmarking
+	ResetReqCnt()
 }
 
 // max number of contacts stored in one k-bucket

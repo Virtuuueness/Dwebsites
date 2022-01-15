@@ -37,3 +37,8 @@ type StoreRequest struct {
 	Key   string
 	Value []byte
 }
+
+type AppendRequest struct {
+	Key  string
+	Addr string
+}

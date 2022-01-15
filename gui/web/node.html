@@ -27,32 +27,6 @@
         </div>
     </div>
 
-    <div data-controller="managewebsite" class="managewebsite">
-        <h2 class="collapsible">Manage Website(s)</h2>
-        <div class="manage-website-form">
-            <input data-managewebsite-target="websiteName" name="websiteName" type="text" placeholder="website name"/>
-            <div class="content">
-                <input data-managewebsite-target="websiteContent" name="websiteContent" type="file" webkitdirectory directory />
-                <button data-action="click->managewebsite#create">
-                    Create/Modify Website
-                </button>
-            </div>
-            <div style="color: gray; font-size: 80%;">Info: upload a single folder containing all files/subfolders of your website</div>
-        </div>
-    </div>
-
-    <div data-controller="browsewebsite" class="browsewebsite">
-        <h2 class="collapsible">Browse Website(s)</h2>
-        <div class="browse-form">
-            <div class="browse">
-                <input data-browsewebsite-target="websiteName" name="websiteName" type="text" placeholder="website name"/>
-                <button data-action="click->browsewebsite#browse">
-                    Browse website
-                </button>
-            </div>
-        </div>
-    </div>
-
     <div class="unicast" data-controller="unicast">
         <h2 class="collapsible">Unicast</h2>
 

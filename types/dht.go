@@ -74,6 +74,29 @@ func (d StoreRequest) HTML() string {
 }
 
 // -----------------------------------------------------------------------------
+//  AppendRequest
+
+// NewEmpty implements types.Message.
+func (d AppendRequest) NewEmpty() Message {
+	return &AppendRequest{}
+}
+
+// Name implements types.Message.
+func (d AppendRequest) Name() string {
+	return "appendrequest"
+}
+
+// String implements types.Message.
+func (d AppendRequest) String() string {
+	return fmt.Sprintf("appendrequest")
+}
+
+// HTML implements types.Message.
+func (d AppendRequest) HTML() string {
+	return d.String()
+}
+
+// -----------------------------------------------------------------------------
 //  FindValueRequest
 
 // NewEmpty implements types.Message.

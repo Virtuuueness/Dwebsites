@@ -34,7 +34,7 @@ type MutableRecord interface {
 	CreateAndPublishFolderRecord(path string, folderName string, privateKey *rsa.PrivateKey, sequence, ttl uint) (string, error)
 
 	// Reconstruct the folder pointed at record in basePath folder
-	ReconstructFolderFromRecord(basePath string, record PointerRecord) (string, error)
+	ReconstructFolderFromRecord(basePath string, record PointerRecord, keep bool) (string, error)
 
 	SetRecordSignature(mh string, pKey *rsa.PrivateKey)
 

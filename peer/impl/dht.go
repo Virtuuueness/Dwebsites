@@ -388,6 +388,20 @@ func (n *node) StoreAtContact(key string, value []byte, contact types.Contact) {
 	}
 }
 
+func (n *node) StoreAppend(key, addr string) {
+	kNearest := n.FindNode(key)
+
+	for _, contact := range kNearest {
+		go func(key, addr string, contact types.Contact) {
+			appendReq := types.AppendRequest{Key: key, Addr: addr}
+			err := n.DirectSend(contact.Addr, appendReq)
+			if err != nil {
+				log.Error().Msgf("[Kademlia] Append()>: <%s>", err.Error())
+			}
+		}(key, addr, contact)
+	}
+}
+
 func (n *node) Store(key string, value []byte) {
 	kNearest := n.FindNode(key)
 
@@ -404,9 +418,14 @@ func (n *node) Store(key string, value []byte) {
 }
 
 // TODO: FindValue(pointerRecord) should wait for all values and pick one with largest sequence
-// FIXME: after that is implemented, caching can be turned on. Without caching we can be certain
+// after that is implemented, caching can be turned on. Without caching we can be certain
 // with high probability that returned value will be last inserted PointerRecord, but with caching
 // we are likely to fetch an older record
+
+// Fetches value associated with given key, returns {fetched value, true} if found,
+// {empty byte array, false} otherwise
+// Values stored in DHT are a list of nodes known to have data associated with given key
+// ie. (addr1|addr2|addr3|addr4) where | is a MetaFileSep constant
 func (n *node) FindValue(key string) ([]byte, bool) {
 	if val, ok := n.localHashMap.Get(key); ok {
 		return val, true
@@ -489,7 +508,7 @@ func (n *node) UploadDHT(data io.Reader) (metahash string, err error) {
 
 		n.conf.Storage.GetDataBlobStore().Set(chunkKey, slice_copy)
 
-		// store in dht
+		// store chunk info in dht
 		n.AppendToDHTEntry(chunkKey, n.conf.Socket.GetAddress())
 
 		metafileKey = append(metafileKey, chunkHash...)
@@ -511,24 +530,25 @@ func (n *node) UploadDHT(data io.Reader) (metahash string, err error) {
 	}
 	metahash = hex.EncodeToString(h.Sum(nil))
 	n.conf.Storage.GetDataBlobStore().Set(metahash, metafile)
-	// store in dht
+	// store metahash info in dht
 	n.AppendToDHTEntry(metahash, n.conf.Socket.GetAddress())
 
 	return metahash, nil
 }
 
 func (n *node) AppendToDHTEntry(key, addr string) {
-	if addrList, ok := n.FindValue(key); ok {
-		addrList = append(addrList, []byte(peer.MetafileSep)...)
-		addrList = append(addrList, []byte(addr)...)
-		n.Store(key, addrList)
-	} else {
-		n.Store(key, []byte(addr))
-	}
+	n.StoreAppend(key, addr)
+	// if addrList, ok := n.FindValue(key); ok {
+	// 	addrList = append(addrList, []byte(peer.MetafileSep)...)
+	// 	addrList = append(addrList, []byte(addr)...)
+	// 	n.Store(key, addrList)
+	// } else {
+	// 	n.Store(key, []byte(addr))
+	// }
 }
 
-func (n *node) DownloadDHT(metahash string) ([]byte, error) {
-	metafile, err := n.FetchResourceDHT(metahash)
+func (n *node) DownloadDHT(metahash string, keep bool) ([]byte, error) {
+	metafile, err := n.FetchResourceDHT(metahash, keep)
 	if err != nil {
 		return nil, err
 	}
@@ -538,7 +558,7 @@ func (n *node) DownloadDHT(metahash string) ([]byte, error) {
 	var file []byte
 
 	for _, chunkKey := range chunkKeys {
-		chunk, err := n.FetchResourceDHT(chunkKey)
+		chunk, err := n.FetchResourceDHT(chunkKey, keep)
 		if err != nil {
 			return nil, err
 		}
@@ -556,6 +576,7 @@ func (n *node) FetchFromPeersDHT(key string) ([]byte, error) {
 	if addrListStr, ok := n.FindValue(key); ok {
 		addrList := strings.Split(string(addrListStr), peer.MetafileSep)
 		dest = addrList[rand.Intn(len(addrList))]
+		// println(key, " has n nodes: ", len(addrList), " fetching from ", dest)
 	} else {
 		return nil, fmt.Errorf("[peer.FetchFromPeers] no known peers hold key %s", key)
 	}
@@ -588,7 +609,7 @@ func (n *node) FetchFromPeersDHT(key string) ([]byte, error) {
 
 // Fetches resource identified by given key, either from local store or from peers.
 // Updates local DataBlobStore in case the resource is fetched from peers.
-func (n *node) FetchResourceDHT(key string) ([]byte, error) {
+func (n *node) FetchResourceDHT(key string, keep bool) ([]byte, error) {
 	// check locally
 	resource := n.conf.Storage.GetDataBlobStore().Get(key)
 
@@ -600,7 +621,21 @@ func (n *node) FetchResourceDHT(key string) ([]byte, error) {
 		// save locally
 		n.conf.Storage.GetDataBlobStore().Set(key, fetchedResource)
 		resource = fetchedResource
+		if keep {
+			go func() {
+				n.AppendToDHTEntry(key, n.conf.Socket.GetAddress())
+			}()
+		}
 	}
 
 	return resource, nil
+}
+
+// for benchmarking
+func (n *node) GetReqCnt() uint64 {
+	return n.ReqCnt
+}
+
+func (n *node) ResetReqCnt() {
+	n.ReqCnt = 0
 }

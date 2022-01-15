@@ -18,11 +18,44 @@
         <tr><td>Socket address</td><td data-peerInfo-target="socketAddr"></td></tr>
     </table>
 
+    <div data-controller="managewebsite" class="managewebsite">
+        <h2 class="collapsible">Manage Website(s)</h2>
+        <div class="manage-website-form">
+            <input data-managewebsite-target="websiteName" name="websiteName" type="text" placeholder="website name"/>
+            <div class="content">
+                <input data-managewebsite-target="websiteContent" name="websiteContent" type="file" webkitdirectory directory />
+                <button data-action="click->managewebsite#create">
+                    Create/Modify Website
+                </button>
+            </div>
+            <div style="color: gray; font-size: 80%;">Info: upload a single folder containing all files/subfolders of your website</div>
+        </div>
+    </div>
+
+    <div data-controller="browsewebsite" class="browsewebsite">
+        <h2 class="collapsible">Browse Website(s)</h2>
+        <div>
+            <div class="browse-form">
+                <div class="browse">
+                    <input data-browsewebsite-target="websiteName" name="websiteName" type="text" placeholder="website name"/>
+                    <button data-action="click->browsewebsite#browse">
+                        Browse website
+                    </button>
+                </div>
+            </div>
+            <div class="cache-form">
+                Store fetched results locally
+                <label class="switch">
+                    <input data-browsewebsite-target="shouldCache" name="shouldCache" type="checkbox" data-action="click->browsewebsite#cache">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+        </div>
+    </div>
 
     <div data-controller="search" class="search">
-        <h2>Search</h2>
-
-            
+        <h2 class="collapsible">Search</h2>
+        <div class="search-form">
             <input data-search-target="searchEnginePattern" name="pattern" type="type" placeholder="pattern (.*)">
             <input data-search-target="searchEngineBudget" name="budget" type="number" placeholder="budget (3)">
             <input data-search-target="searchEngineTimeout" name="timeout" type="type" placeholder="timeout (1s)">
@@ -30,12 +63,10 @@
                 <input data-search-target="searchEngineContent" type="checkbox" id="content-checkbox" checked>
                 <label for="content-checkbox">search in content</label>
             </div>
-
             <button data-action="click->search#searchEngine">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M24 10h-10v-10h-4v10h-10v4h10v10h4v-10h10z"/></svg>
                 Search
             </button>
-
             <table>
                 <thead>
                     <th>Name</th>
@@ -44,10 +75,8 @@
                 <tbody data-search-target="searchEngineResult">
                 </tbody>
             </table>
-
-        
+        </div>
     </div>
-
     
     <script src="assets/scripts/stimulus.js"></script>
     <script src="assets/scripts/viz.js"></script>

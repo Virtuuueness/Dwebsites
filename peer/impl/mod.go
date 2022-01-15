@@ -25,6 +25,7 @@ import (
 
 // NewPeer creates a new peer
 func NewPeer(conf peer.Configuration) peer.Peer {
+	conf.ChunkSize = 2000
 	table := make(peer.RoutingTable)
 	table[conf.Socket.GetAddress()] = conf.Socket.GetAddress()
 
@@ -67,6 +68,7 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 		localHashMap:     SafeByteMap{byteMap: make(map[string][]byte)},
 		contactsChannels: ContactsChannels{channelsMap: make(map[string]chan *types.FindNodeReply)},
 		valueChannels:    ValueChannels{channelsMap: make(map[string]chan *types.FindValueReply)},
+		ReqCnt:           uint64(0),
 
 		// Page rank
 		pageRank: pageRank{nodes: make(map[string]struct{}),
@@ -123,6 +125,7 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	conf.MessageRegistry.RegisterMessageCallback(&types.FindValueReply{}, n.FindValueReplyExec)
 	conf.MessageRegistry.RegisterMessageCallback(&types.FindValueRequest{}, n.FindValueRequestExec)
 	conf.MessageRegistry.RegisterMessageCallback(&types.StoreRequest{}, n.StoreRequestExec)
+	conf.MessageRegistry.RegisterMessageCallback(&types.AppendRequest{}, n.AppendRequestExec)
 
 	// PageRank
 	conf.MessageRegistry.RegisterMessageCallback(&types.PageRankPaxosPrepareMessage{}, n.PageRankPaxosPrepareMessageExec)
@@ -172,6 +175,7 @@ type node struct {
 	localHashMap     SafeByteMap
 	contactsChannels ContactsChannels
 	valueChannels    ValueChannels
+	ReqCnt           uint64
 
 	// PageRank
 	pageRank                 pageRank
