@@ -146,6 +146,22 @@ func (r *SafeByteMap) Set(key string, val []byte) []byte {
 	return val
 }
 
+func (r *SafeByteMap) Append(key, addr string) []byte {
+	r.Lock()
+	defer r.Unlock()
+
+	addrList, ok := r.byteMap[key]
+	if !ok {
+		r.byteMap[key] = []byte(addr)
+	} else {
+		addrList := append(addrList, []byte(peer.MetafileSep)...)
+		addrList = append(addrList, []byte(addr)...)
+		r.byteMap[key] = addrList
+	}
+
+	return r.byteMap[key]
+}
+
 func (r *SafeByteMap) Get(key string) ([]byte, bool) {
 	r.Lock()
 	defer r.Unlock()

@@ -101,4 +101,17 @@ func (n *node) StoreRequestExec(msg types.Message, pkt transport.Packet) error {
 	return nil
 }
 
+func (n *node) AppendRequestExec(msg types.Message, pkt transport.Packet) error {
+	req, ok := msg.(*types.AppendRequest)
+	if !ok {
+		return fmt.Errorf("wrong type: %T", msg)
+	}
+
+	n.AddContact(NewContact(pkt.Header.Source))
+
+	n.localHashMap.Append(req.Key, req.Addr)
+
+	return nil
+}
+
 // TODO: ping
