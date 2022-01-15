@@ -62,7 +62,7 @@ func (n *node) CreateAndPublishFolderRecord(path string, folderName string, priv
 	return recordHash, err
 }
 
-func (n *node) ReconstructFolderFromRecord(basePath string, record peer.PointerRecord) (string, error) {
+func (n *node) ReconstructFolderFromRecord(basePath string, record peer.PointerRecord, keep bool) (string, error) {
 	if !n.IsFolderRecord(record) {
 		return "", fmt.Errorf("record should be a folder to reconstruct it")
 	}
@@ -80,9 +80,9 @@ func (n *node) ReconstructFolderFromRecord(basePath string, record peer.PointerR
 			return "", fmt.Errorf("record not found: " + f)
 		}
 		if n.IsFolderRecord(fetchedRecord) {
-			n.ReconstructFolderFromRecord(filepath.Join(basePath, record.Name), fetchedRecord)
+			n.ReconstructFolderFromRecord(filepath.Join(basePath, record.Name), fetchedRecord, keep)
 		} else {
-			res, err := n.DownloadDHT(fetchedRecord.Value, false)
+			res, err := n.DownloadDHT(fetchedRecord.Value, keep)
 			if err != nil {
 				return "", err
 			}

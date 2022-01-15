@@ -3,6 +3,7 @@ package controller
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -19,18 +20,20 @@ import (
 )
 
 type redirectServer struct {
-	peer       peer.Peer
-	log        *zerolog.Logger
-	localCache map[string]uint
+	peer                  peer.Peer
+	log                   *zerolog.Logger
+	localCache            map[string]uint
+	shouldCacheFetchedDHT bool
 }
 
 const error404File = "web/404.html"
 
 func NewRedirectServer(peer peer.Peer, log *zerolog.Logger) redirectServer {
 	return redirectServer{
-		peer:       peer,
-		log:        log,
-		localCache: make(map[string]uint),
+		peer:                  peer,
+		log:                   log,
+		localCache:            make(map[string]uint),
+		shouldCacheFetchedDHT: false,
 	}
 }
 
@@ -57,6 +60,29 @@ func (re *redirectServer) RedirectHandler() http.HandlerFunc {
 			fullURL := strings.TrimPrefix(r.URL.Path[1:], "www.")
 			// Get site's folder (either locally or remote and serve the right file)
 			http.ServeFile(w, r, re.getWebsiteAndRedirectLinks(fullURL, fmt.Sprintf("http://%s/", r.Host)))
+		case http.MethodOptions:
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Headers", "*")
+		default:
+			http.Error(w, "forbidden method", http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+func (re *redirectServer) CacheHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			var p struct {
+				ShouldCache bool
+			}
+			err := json.NewDecoder(r.Body).Decode(&p)
+			if err != nil {
+				http.Error(w, "failed to read fetch value: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			re.shouldCacheFetchedDHT = p.ShouldCache
 		case http.MethodOptions:
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Headers", "*")
@@ -179,7 +205,7 @@ func (r *redirectServer) getWebsiteAndRedirectLinks(fullURL string, hostUrl stri
 	if seq, ok := r.localCache[websiteName]; ok && seq == fetchedRecord.Sequence {
 		return filepath.Join(os.TempDir(), fullURL)
 	}
-	_, err = r.peer.ReconstructFolderFromRecord(os.TempDir(), fetchedRecord)
+	_, err = r.peer.ReconstructFolderFromRecord(os.TempDir(), fetchedRecord, r.shouldCacheFetchedDHT)
 	if err != nil {
 		r.log.Error().Msg("could not reconstruct folder from pointer: " + addr)
 		return error404File

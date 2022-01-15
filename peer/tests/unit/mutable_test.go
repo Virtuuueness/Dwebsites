@@ -158,7 +158,7 @@ func Test_MUTABLE_KademliaFileUploadDownload(t *testing.T) {
 
 	// everyone can download now
 	for i := range nodes {
-		res, err := nodes[i].DownloadDHT(mhB)
+		res, err := nodes[i].DownloadDHT(mhB, false)
 		require.NoError(t, err)
 		require.Equal(t, fileB, res)
 	}
@@ -209,7 +209,7 @@ func Test_MUTABLE_KademliaEditFileUnderPointerRecord(t *testing.T) {
 		require.Equal(t, mhB, fetchedRecord.Value)
 
 		// everyone can download file pointer to by record
-		res, err := nodes[i].DownloadDHT(fetchedRecord.Value)
+		res, err := nodes[i].DownloadDHT(fetchedRecord.Value, false)
 		require.NoError(t, err)
 		require.Equal(t, fileB, res)
 	}
@@ -242,7 +242,7 @@ func Test_MUTABLE_KademliaEditFileUnderPointerRecord(t *testing.T) {
 		require.Equal(t, mhC, fetchedRecord.Value)
 
 		// everyone can download edited file
-		res, err := nodes[i].DownloadDHT(fetchedRecord.Value)
+		res, err := nodes[i].DownloadDHT(fetchedRecord.Value, false)
 		require.NoError(t, err)
 		require.Equal(t, fileC, res)
 	}
@@ -303,7 +303,7 @@ func Test_MUTABLE_KademliaFolderPointerToReconstructFolder(t *testing.T) {
 	err = os.Mkdir(tmpFolderResult, 0777)
 	require.NoError(t, err)
 
-	nodes[0].ReconstructFolderFromRecord(tmpFolderResult, record)
+	nodes[0].ReconstructFolderFromRecord(tmpFolderResult, record, false)
 	_, err = os.Stat(filepath.Join(tmpFolderResult, "tmpFolder"))
 	require.Equal(t, nil, err)
 	_, err = os.Stat(filepath.Join(tmpFolderResult, "tmpFolder", "subfolder1"))
@@ -406,7 +406,7 @@ func Test_MUTABLE_KademliaUseFolderUnderPointerRecord(t *testing.T) {
 		newFetchedRecord, ok := nodes[i].FetchPointerRecord(fetchedRecord.Links[0])
 		require.Equal(t, true, ok)
 		require.Equal(t, false, nodes[i].IsFolderRecord(newFetchedRecord))
-		res, err := nodes[i].DownloadDHT(newFetchedRecord.Value)
+		res, err := nodes[i].DownloadDHT(newFetchedRecord.Value, false)
 		require.NoError(t, err)
 		require.Equal(t, []byte("File 0 content"), res)
 
@@ -470,7 +470,7 @@ func Test_MUTABLE_KademliaTagPointerRecord(t *testing.T) {
 		require.Equal(t, mhB, fetchedRecord.Value)
 
 		// everyone can download file pointer to by record
-		res, err := nodes[i].DownloadDHT(fetchedRecord.Value)
+		res, err := nodes[i].DownloadDHT(fetchedRecord.Value, false)
 		require.NoError(t, err)
 		require.Equal(t, fileB, res)
 	}
@@ -505,7 +505,7 @@ func Test_MUTABLE_KademliaTagPointerRecord(t *testing.T) {
 		require.Equal(t, mhC, fetchedRecord.Value)
 
 		// everyone can download edited file
-		res, err := nodes[i].DownloadDHT(fetchedRecord.Value)
+		res, err := nodes[i].DownloadDHT(fetchedRecord.Value, false)
 		require.NoError(t, err)
 		require.Equal(t, fileC, res)
 	}
