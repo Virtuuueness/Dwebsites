@@ -108,6 +108,11 @@ class Flash extends Stimulus.Controller {
         this.wrapperTarget.appendChild(flash);
     }
 
+    printInfo(e) {
+        const flash = this.createFlash("info", e);
+        this.wrapperTarget.appendChild(flash);
+    }
+
     createFlash(className, content) {
         content = content.replace(/\s+/g, ' ').trim();
 
@@ -923,7 +928,6 @@ class ManageWebsite extends BaseElement {
     }
 
     async create() {
-        this.flash.printSuccess("uploading site...");
         const addr = this.peerInfo.getAPIURL("/website/manage");
 
         const ok = this.checkInputs(this.websiteNameTarget, this.websiteContentTarget);
@@ -940,6 +944,8 @@ class ManageWebsite extends BaseElement {
             return;
         }
 
+        this.flash.printInfo("uploading site...");
+
         let formData = new FormData();
         formData.append("Name", websiteName);
         for (let i = 0, numFiles = websiteContent.length; i < numFiles; i++) {
@@ -953,7 +959,7 @@ class ManageWebsite extends BaseElement {
 
         try {
             await this.fetch(addr, fetchArgs);
-            this.flash.printSuccess("create website done");
+            this.flash.printSuccess("website created");
         } catch (e) {
             this.flash.printError("failed to create website: " + e);
         }
