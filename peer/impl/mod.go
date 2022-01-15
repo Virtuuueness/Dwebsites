@@ -932,12 +932,11 @@ func (n *node) SearchFirst(pattern regexp.Regexp, conf peer.ExpandingRing) (stri
 }
 
 func (n *node) AddLink(from string, to string) error {
+
 	// Link already in the graph
 	if n.pageRank.LinkAlreadyExist(from, to) {
 		return nil
 	}
-
-	n.pageRankBlocked.Set(true)
 
 	// If only one node
 	if n.conf.TotalPeers <= 1 {
@@ -948,6 +947,8 @@ func (n *node) AddLink(from string, to string) error {
 		n.pageRankRanking.Unlock()
 		return nil
 	}
+
+	n.pageRankBlocked.Set(true)
 
 PAXOS:
 	prepareID := n.conf.PaxosID
@@ -1105,6 +1106,10 @@ func (n *node) SearchEngineSeach(reg regexp.Regexp, budget uint, timeout time.Du
 		leftPeers--
 		leftBudget -= peerBudget
 	}
+
+	matchs := n.SearchMatchLocally(reg.String(), contentSearch)
+
+	n.searchEngineResponseStorage.AddResponses(requestID, matchs)
 
 	wg.Wait()
 

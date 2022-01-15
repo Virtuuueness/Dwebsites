@@ -5,7 +5,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -15,6 +18,7 @@ import (
 	"go.dedis.ch/cs438/storage"
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/types"
+	"golang.org/x/net/html"
 
 	"go.dedis.ch/cs438/peer"
 )
@@ -900,19 +904,8 @@ func (n *node) SearchEngineRequestMessageExec(msg types.Message, pkt transport.P
 		}
 	}()
 
-	// process localy
-	// reg := regexp.MustCompile(req.Pattern)
-
-	var responses []string
-
-	// TODO Compute responses from local website data
-
-	if req.ContentSearch {
-		// TODO also add regex match from content
-	}
-
 	// send reply
-	reply := types.SearchEngineReplyMessage{RequestID: req.RequestID, Responses: responses}
+	reply := types.SearchEngineReplyMessage{RequestID: req.RequestID, Responses: n.SearchMatchLocally(req.Pattern, req.ContentSearch)}
 	transportReply, err := n.conf.MessageRegistry.MarshalMessage(reply)
 	if err != nil {
 		return err
@@ -920,4 +913,71 @@ func (n *node) SearchEngineRequestMessageExec(msg types.Message, pkt transport.P
 	header := transport.NewHeader(n.conf.Socket.GetAddress(), n.conf.Socket.GetAddress(), req.Origin, 0)
 	replyPkt := transport.Packet{Header: &header, Msg: &transportReply}
 	return n.conf.Socket.Send(pkt.Header.Source, replyPkt, n.socketTimeout)
+}
+
+// constructs types.FileInfo object
+func (n *node) SearchMatchLocally(regPattern string, isContentSearch bool) []string {
+	// process localy
+	reg := regexp.MustCompile(regPattern)
+
+	var responses []string
+
+	// construct fileInfos from matching files
+	n.conf.Storage.GetNamingStore().ForEach(func(key string, val []byte) bool {
+		fmt.Printf("key: %v\n", key)
+		regWebsite, _ := regexp.Compile("\\.")
+		if regWebsite.Match([]byte(key)) {
+			if reg.Match([]byte(key)) {
+				responses = append(responses, key)
+			} else if isContentSearch {
+
+				// Get local path
+				path := filepath.Join(os.TempDir(), "Peersteer", key)
+
+				// fetch path of all html files in website
+				var files []string
+				err := filepath.Walk(path,
+					func(path string, info os.FileInfo, err error) error {
+						if info != nil && !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".html") {
+							files = append(files, path)
+						}
+						return err
+					})
+
+				if err == nil {
+					found := false
+
+					// check text content of all files
+					for _, f := range files {
+						if found {
+							break
+						}
+						content, err := ioutil.ReadFile(f)
+						if err == nil {
+							z := html.NewTokenizer(strings.NewReader(string(content)))
+							for tokenType := z.Next(); tokenType != html.ErrorToken; {
+								if tokenType != html.TextToken {
+									tokenType = z.Next()
+									continue
+								}
+								txtContent := strings.TrimSpace(html.UnescapeString(string(z.Text())))
+
+								//Check match in text content
+								if reg.Match([]byte(txtContent)) {
+									responses = append(responses, key)
+									found = true
+									break
+								}
+
+								tokenType = z.Next()
+							}
+						}
+					}
+				}
+			}
+		}
+		return true
+	})
+
+	return responses
 }

@@ -304,7 +304,6 @@ func (d datasharing) indexPost(w http.ResponseWriter, r *http.Request) {
 func (d datasharing) searchEnginePost(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	fmt.Printf("\"here\": %v\n", "here")
 	buf, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to read body: %v", err),
@@ -339,6 +338,11 @@ func (d datasharing) searchEnginePost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("failed to index: %v", err), http.StatusBadRequest)
 		return
 	}
+	for i, p := range names {
+		names[i] = peer.Pair{Key: fmt.Sprintf("http://%s/", r.Host) + p.Key, Value: p.Value}
+	}
+
+	fmt.Printf("names: %v\n", names)
 
 	js, err := json.Marshal(&names)
 	if err != nil {

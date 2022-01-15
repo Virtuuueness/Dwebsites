@@ -601,8 +601,15 @@ func (s *SearchEngineResponseStorage) AddResponses(requestID string, res []strin
 	s.Lock()
 	defer s.Unlock()
 
-	for _, website := range res {
-		s.responses[requestID][website] = struct{}{}
+	if res != nil {
+
+		_, ok := s.responses[requestID]
+		if !ok {
+			s.responses[requestID] = make(map[string]struct{})
+		}
+		for _, website := range res {
+			s.responses[requestID][website] = struct{}{}
+		}
 	}
 }
 
