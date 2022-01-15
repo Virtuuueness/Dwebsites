@@ -82,7 +82,7 @@ func (n *node) ReconstructFolderFromRecord(basePath string, record peer.PointerR
 		if n.IsFolderRecord(fetchedRecord) {
 			n.ReconstructFolderFromRecord(filepath.Join(basePath, record.Name), fetchedRecord)
 		} else {
-			res, err := n.DownloadDHT(fetchedRecord.Value)
+			res, err := n.DownloadDHT(fetchedRecord.Value, false)
 			if err != nil {
 				return "", err
 			}
