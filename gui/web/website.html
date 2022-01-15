@@ -34,12 +34,21 @@
 
     <div data-controller="browsewebsite" class="browsewebsite">
         <h2 class="collapsible">Browse Website(s)</h2>
-        <div class="browse-form">
-            <div class="browse">
-                <input data-browsewebsite-target="websiteName" name="websiteName" type="text" placeholder="website name"/>
-                <button data-action="click->browsewebsite#browse">
-                    Browse website
-                </button>
+        <div>
+            <div class="browse-form">
+                <div class="browse">
+                    <input data-browsewebsite-target="websiteName" name="websiteName" type="text" placeholder="website name"/>
+                    <button data-action="click->browsewebsite#browse">
+                        Browse website
+                    </button>
+                </div>
+            </div>
+            <div class="cache-form">
+                Store fetched results locally
+                <label class="switch">
+                    <input data-browsewebsite-target="shouldCache" name="shouldCache" type="checkbox" data-action="click->browsewebsite#cache">
+                    <span class="slider round"></span>
+                </label>
             </div>
         </div>
     </div>

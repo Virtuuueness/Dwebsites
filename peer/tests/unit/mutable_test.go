@@ -304,7 +304,7 @@ func Test_MUTABLE_KademliaFolderPointerToReconstructFolder(t *testing.T) {
 	err = os.Mkdir(tmpFolderResult, 0777)
 	require.NoError(t, err)
 
-	nodes[0].ReconstructFolderFromRecord(tmpFolderResult, record)
+	nodes[0].ReconstructFolderFromRecord(tmpFolderResult, record, false)
 	_, err = os.Stat(filepath.Join(tmpFolderResult, "tmpFolder"))
 	require.Equal(t, nil, err)
 	_, err = os.Stat(filepath.Join(tmpFolderResult, "tmpFolder", "subfolder1"))

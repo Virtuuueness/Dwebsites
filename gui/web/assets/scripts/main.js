@@ -900,7 +900,7 @@ class Naming extends BaseElement {
 
 class BrowseWebsite extends BaseElement {
     static get targets() {
-        return ["websiteName"];
+        return ["websiteName", "shouldCache"];
     }
 
     async browse() {
@@ -919,6 +919,29 @@ class BrowseWebsite extends BaseElement {
 
         const addr = this.peerInfo.getAPIURL("/" + websiteName);
         window.open(addr);
+    }
+
+    async cache() {
+        const addr = this.peerInfo.getAPIURL("/website/cache");
+
+        const ok = this.checkInputs(this.shouldCacheTarget);
+        if (!ok) {
+            return;
+        }
+
+        const shouldCache = this.shouldCacheTarget.checked;
+
+        const fetchArgs = {
+            method: "POST",
+            body: JSON.stringify({"ShouldCache": shouldCache})
+        };
+
+        try {
+            await this.fetch(addr, fetchArgs);
+            this.flash.printSuccess("fetch option saved");
+        } catch (e) {
+            this.flash.printError("failed to change fetch option: " + e);
+        }
     }
 }
 
