@@ -1,7 +1,6 @@
 package unit
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
@@ -676,7 +675,9 @@ func Test_MUTABLE_KademliaStressTest3(t *testing.T) {
 	}
 }
 
-// one node uploads file, all nodes download one after the other,
+// hot key simulation - uniform distribution of requests
+// Uncomment to run
+/*
 func Test_MUTABLE_KademliaRequestDistributionBenchmark(t *testing.T) {
 	numNodes := 20
 	if numNodes < 2 {
@@ -730,3 +731,4 @@ func Test_MUTABLE_KademliaRequestDistributionBenchmark(t *testing.T) {
 		println()
 	}
 }
+*/

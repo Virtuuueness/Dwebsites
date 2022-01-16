@@ -5,10 +5,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"github.com/rs/xid"
-	"github.com/rs/zerolog/log"
-	"go.dedis.ch/cs438/peer"
-	"go.dedis.ch/cs438/types"
 	"io"
 	"math"
 	"math/big"
@@ -16,6 +12,11 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/rs/xid"
+	"github.com/rs/zerolog/log"
+	"go.dedis.ch/cs438/peer"
+	"go.dedis.ch/cs438/types"
 )
 
 func min(a, b int) int {
@@ -71,10 +72,6 @@ func (n *node) AddContact(contact types.Contact) {
 // returns the id of the k-bucket which would containt given id
 func (n *node) GetKBucketIndexForID(id big.Int) int64 {
 	dist := distance(n.id, id)
-
-	// hack to find floor(log2(distance))
-	// bitStr := fmt.Sprintf("%b", dist)
-	// floorLog := len(bitStr) - 1
 
 	floorLog := math.Floor(math.Log2(float64(dist.Uint64())))
 	return int64(floorLog)
@@ -216,10 +213,6 @@ func (n *node) Query(key string, currentKNearest, toQuery []types.Contact,
 
 	id := new(big.Int)
 	id.SetString(key, 16)
-
-	// var shortest_dist int64
-	// shortest_dist = -1
-	// var closest_contact types.Contact
 
 	remoteContactsChan := make(chan []types.Contact, len(toQuery))
 	remoteValueChan := make(chan []byte, len(toQuery))
@@ -418,7 +411,7 @@ func (n *node) Store(key string, value []byte) {
 }
 
 // TODO: FindValue(pointerRecord) should wait for all values and pick one with largest sequence
-// after that is implemented, caching can be turned on. Without caching we can be certain
+// after that is implemented, caching can be turned on globally for DHT. Without caching we can be certain
 // with high probability that returned value will be last inserted PointerRecord, but with caching
 // we are likely to fetch an older record
 
@@ -468,6 +461,7 @@ func (n *node) FindValue(key string) ([]byte, bool) {
 	}
 }
 
+// Adds given address as a Contact of this node
 func (n *node) Bootstrap(peerAddr string) {
 	hash := sha1.Sum([]byte(peerAddr))
 	id := *big.NewInt(0)
@@ -538,13 +532,6 @@ func (n *node) UploadDHT(data io.Reader) (metahash string, err error) {
 
 func (n *node) AppendToDHTEntry(key, addr string) {
 	n.StoreAppend(key, addr)
-	// if addrList, ok := n.FindValue(key); ok {
-	// 	addrList = append(addrList, []byte(peer.MetafileSep)...)
-	// 	addrList = append(addrList, []byte(addr)...)
-	// 	n.Store(key, addrList)
-	// } else {
-	// 	n.Store(key, []byte(addr))
-	// }
 }
 
 func (n *node) DownloadDHT(metahash string, keep bool) ([]byte, error) {
@@ -576,7 +563,6 @@ func (n *node) FetchFromPeersDHT(key string) ([]byte, error) {
 	if addrListStr, ok := n.FindValue(key); ok {
 		addrList := strings.Split(string(addrListStr), peer.MetafileSep)
 		dest = addrList[rand.Intn(len(addrList))]
-		// println(key, " has n nodes: ", len(addrList), " fetching from ", dest)
 	} else {
 		return nil, fmt.Errorf("[peer.FetchFromPeers] no known peers hold key %s", key)
 	}
@@ -636,6 +622,7 @@ func (n *node) GetReqCnt() uint64 {
 	return n.ReqCnt
 }
 
+// for benchmarking
 func (n *node) ResetReqCnt() {
 	n.ReqCnt = 0
 }
