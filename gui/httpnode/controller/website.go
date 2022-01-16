@@ -28,6 +28,8 @@ type redirectServer struct {
 
 const error404File = "web/404.html"
 
+const topFolder = "Peersteer"
+
 func NewRedirectServer(peer peer.Peer, log *zerolog.Logger) redirectServer {
 	return redirectServer{
 		peer:                  peer,
@@ -99,7 +101,7 @@ func (re *redirectServer) uploadWebsite(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	websiteName := strings.TrimPrefix(r.MultipartForm.Value["Name"][0], "www.")
-	rootPath := filepath.Join(os.TempDir(), websiteName)
+	rootPath := filepath.Join(os.TempDir(), topFolder, websiteName)
 	err = os.RemoveAll(rootPath)
 	if err != nil {
 		http.Error(w, "failed to create top level folder: "+err.Error(), http.StatusInternalServerError)
@@ -126,7 +128,7 @@ func (re *redirectServer) uploadWebsite(w http.ResponseWriter, r *http.Request) 
 		cleanPath := filepath.Clean(match[1])
 		splittedPath := strings.Split(cleanPath, "/")
 		splittedPath[0] = websiteName
-		path := filepath.Join(os.TempDir(), strings.Join(splittedPath, "/"))
+		path := filepath.Join(os.TempDir(), topFolder, strings.Join(splittedPath, "/"))
 		err = os.MkdirAll(filepath.Dir(path), os.ModePerm)
 		if err != nil {
 			http.Error(w, "failed to create sub folder: "+err.Error(), http.StatusInternalServerError)
@@ -180,6 +182,7 @@ func (re *redirectServer) uploadWebsite(w http.ResponseWriter, r *http.Request) 
 		}
 		re.peer.SetRecordSignature(recordHash, privateKey)
 	}
+	re.addPageRankLinks(rootPath, websiteName)
 }
 
 // Get files remotely and decorate local folder's links or from cache if same version than peerster
@@ -203,16 +206,16 @@ func (r *redirectServer) getWebsiteAndRedirectLinks(fullURL string, hostUrl stri
 	}
 	// Last version is already in cache
 	if seq, ok := r.localCache[websiteName]; ok && seq == fetchedRecord.Sequence {
-		return filepath.Join(os.TempDir(), fullURL)
+		return filepath.Join(os.TempDir(), topFolder, fullURL)
 	}
-	_, err = r.peer.ReconstructFolderFromRecord(os.TempDir(), fetchedRecord, r.shouldCacheFetchedDHT)
+	_, err = r.peer.ReconstructFolderFromRecord(filepath.Join(os.TempDir(), topFolder), fetchedRecord, r.shouldCacheFetchedDHT)
 	if err != nil {
 		r.log.Error().Msg("could not reconstruct folder from pointer: " + addr)
 		return error404File
 	}
-	decorateFolder(filepath.Join(os.TempDir(), websiteName), hostUrl)
+	decorateFolder(filepath.Join(os.TempDir(), topFolder, websiteName), hostUrl)
 	r.localCache[websiteName] = fetchedRecord.Sequence
-	return filepath.Join(os.TempDir(), fullURL)
+	return filepath.Join(os.TempDir(), topFolder, fullURL)
 }
 
 // Decorate all HTML file in a folder by changing link to localhost redirect
@@ -247,6 +250,45 @@ func decorateHTML(path string, hostUrl string) error {
 	return stringToFile(path, replaceLinks(text, links, hostUrl))
 }
 
+func (r *redirectServer) addPageRankLinks(path string, websiteName string) error {
+
+	var files []string
+	err := filepath.Walk(path,
+		func(path string, info os.FileInfo, err error) error {
+			if info != nil && !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".html") {
+				files = append(files, path)
+			}
+			return err
+		})
+	if err != nil {
+		return err
+	}
+	for _, f := range files {
+		text, err := fileToString(f)
+		if err != nil {
+			return err
+		}
+		links, err := extractHrefFromContent(text)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("links: %v\n", links)
+		for _, link := range links {
+			l := strings.TrimPrefix(link, "www.")
+
+			fmt.Println("Add link : ", websiteName, " -> ", l)
+
+			err = r.peer.AddLink(websiteName, l)
+			fmt.Printf("\"added link \": %v\n", "added link ")
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func fileToString(path string) (string, error) {
 	content, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -263,6 +305,7 @@ func stringToFile(path string, content string) error {
 func replaceLinks(inputContent string, currentUrls []string, hostUrl string) string {
 	var replaceArr []string
 	for _, c := range currentUrls {
+
 		replaceArr = append(replaceArr, c)
 		if c[:5] == "https" {
 			replaceArr = append(replaceArr, hostUrl+c[8:])

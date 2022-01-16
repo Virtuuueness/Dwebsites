@@ -388,6 +388,20 @@ func (n *node) StoreAtContact(key string, value []byte, contact types.Contact) {
 	}
 }
 
+func (n *node) StoreAppend(key, addr string) {
+	kNearest := n.FindNode(key)
+
+	for _, contact := range kNearest {
+		go func(key, addr string, contact types.Contact) {
+			appendReq := types.AppendRequest{Key: key, Addr: addr}
+			err := n.DirectSend(contact.Addr, appendReq)
+			if err != nil {
+				log.Error().Msgf("[Kademlia] Append()>: <%s>", err.Error())
+			}
+		}(key, addr, contact)
+	}
+}
+
 func (n *node) Store(key string, value []byte) {
 	kNearest := n.FindNode(key)
 
@@ -523,13 +537,14 @@ func (n *node) UploadDHT(data io.Reader) (metahash string, err error) {
 }
 
 func (n *node) AppendToDHTEntry(key, addr string) {
-	if addrList, ok := n.FindValue(key); ok {
-		addrList = append(addrList, []byte(peer.MetafileSep)...)
-		addrList = append(addrList, []byte(addr)...)
-		n.Store(key, addrList)
-	} else {
-		n.Store(key, []byte(addr))
-	}
+	n.StoreAppend(key, addr)
+	// if addrList, ok := n.FindValue(key); ok {
+	// 	addrList = append(addrList, []byte(peer.MetafileSep)...)
+	// 	addrList = append(addrList, []byte(addr)...)
+	// 	n.Store(key, addrList)
+	// } else {
+	// 	n.Store(key, []byte(addr))
+	// }
 }
 
 func (n *node) DownloadDHT(metahash string, keep bool) ([]byte, error) {
@@ -561,6 +576,7 @@ func (n *node) FetchFromPeersDHT(key string) ([]byte, error) {
 	if addrListStr, ok := n.FindValue(key); ok {
 		addrList := strings.Split(string(addrListStr), peer.MetafileSep)
 		dest = addrList[rand.Intn(len(addrList))]
+		// println(key, " has n nodes: ", len(addrList), " fetching from ", dest)
 	} else {
 		return nil, fmt.Errorf("[peer.FetchFromPeers] no known peers hold key %s", key)
 	}
@@ -613,4 +629,13 @@ func (n *node) FetchResourceDHT(key string, keep bool) ([]byte, error) {
 	}
 
 	return resource, nil
+}
+
+// for benchmarking
+func (n *node) GetReqCnt() uint64 {
+	return n.ReqCnt
+}
+
+func (n *node) ResetReqCnt() {
+	n.ReqCnt = 0
 }

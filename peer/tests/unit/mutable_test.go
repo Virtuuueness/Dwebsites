@@ -1,6 +1,7 @@
 package unit
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
@@ -548,7 +549,7 @@ func Test_MUTABLE_KademliaStressTest1(t *testing.T) {
 
 // everyone stores k {key,val} pairs, everyone should be able to fetch all stored pairs
 func Test_MUTABLE_KademliaStressTest2(t *testing.T) {
-	numNodes := 30
+	numNodes := 20
 	numStores := 3
 	if numNodes < 2 {
 		return
@@ -600,7 +601,7 @@ func Test_MUTABLE_KademliaStressTest2(t *testing.T) {
 // everyone stores k {key,val} pairs, everyone should be able to fetch all stored pairs
 // everyone overwrites the {key,val} pairs they written, everyone should be able to fetch new pairs
 func Test_MUTABLE_KademliaStressTest3(t *testing.T) {
-	numNodes := 30
+	numNodes := 20
 	numStores := 3
 	if numNodes < 2 {
 		return
@@ -672,5 +673,60 @@ func Test_MUTABLE_KademliaStressTest3(t *testing.T) {
 				require.Equal(t, val, string(val1[:]))
 			}
 		}
+	}
+}
+
+// one node uploads file, all nodes download one after the other,
+func Test_MUTABLE_KademliaRequestDistributionBenchmark(t *testing.T) {
+	numNodes := 20
+	if numNodes < 2 {
+		return
+	}
+
+	transp := channel.NewTransport()
+	nodes := make([]z.TestNode, numNodes*2)
+
+	for i := 0; i < 2*numNodes; i++ {
+		node := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0")
+		defer node.Stop()
+
+		nodes[i] = node
+	}
+
+	// bootstrap all nodes
+	for i := range nodes {
+		nodes[i].Bootstrap(nodes[0].GetAddr())
+	}
+	println("Bootstraped ", 2*numNodes, " nodes")
+	time.Sleep(time.Second * 1)
+
+	file, err := os.Open("HW2_test.go")
+	if err != nil {
+		panic(err.Error())
+	}
+	defer file.Close()
+	reader := bufio.NewReader(file)
+
+	mhB, err := nodes[0].UploadDHT(reader)
+	require.NoError(t, err)
+
+	for i := 1; i < numNodes; i++ {
+		// all nodes download one after the other, i nodes cache locally
+		// and update the DHT
+		for k := 1; k < numNodes; k++ {
+			b := false
+			if k <= i {
+				b = true
+			}
+			_, err := nodes[i].DownloadDHT(mhB, b)
+			time.Sleep(time.Second * 1)
+			require.NoError(t, err)
+		}
+		println(i, " caching nodes")
+		for j := 0; j < numNodes; j++ {
+			println(j, " ReqCnt: ", nodes[j].GetReqCnt())
+			nodes[j].ResetReqCnt()
+		}
+		println()
 	}
 }

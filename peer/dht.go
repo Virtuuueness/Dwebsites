@@ -28,6 +28,12 @@ type KademliaDHT interface {
 
 	// Downloads data associated with given metahash from the DHT
 	DownloadDHT(metahash string, keep bool) ([]byte, error)
+
+	// Used for benchmarking
+	GetReqCnt() uint64
+
+	// Used for benchmarking
+	ResetReqCnt()
 }
 
 // max number of contacts stored in one k-bucket
