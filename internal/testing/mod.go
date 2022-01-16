@@ -290,6 +290,62 @@ func WithPaxosProposerRetry(d time.Duration) Option {
 	}
 }
 
+func NewBenchmarkTestNode(b *testing.B, f peer.Factory, trans transport.Transport,
+	addr string, opts ...Option) BenchmarkTestNode {
+
+	template := newConfigTemplate()
+	for _, opt := range opts {
+		opt(&template)
+	}
+
+	socket, err := trans.CreateSocket(addr)
+	require.NoError(b, err)
+
+	config := peer.Configuration{}
+
+	config.Socket = socket
+	config.MessageRegistry = template.registry
+	config.AntiEntropyInterval = template.AntiEntropyInterval
+	config.HeartbeatInterval = template.HeartbeatInterval
+	config.ContinueMongering = template.ContinueMongering
+	config.AckTimeout = template.AckTimeout
+	config.Storage = template.storage
+	config.ChunkSize = template.chunkSize
+	config.BackoffDataRequest = template.dataRequestBackoff
+	config.TotalPeers = template.totalPeers
+	config.PaxosThreshold = template.paxosThreshold
+	config.PaxosID = template.paxosID
+	config.PaxosProposerRetry = template.paxosProposerRetry
+
+	node := f(config)
+
+	require.Equal(b, len(template.messages), len(template.handlers))
+	for i, msg := range template.messages {
+		config.MessageRegistry.RegisterMessageCallback(msg, template.handlers[i])
+	}
+
+	if template.autoStart {
+		err := node.Start()
+		require.NoError(b, err)
+	}
+
+	return BenchmarkTestNode{
+		Peer:   node,
+		config: config,
+		socket: socket,
+	}
+}
+
+type BenchmarkTestNode struct {
+	peer.Peer
+	config peer.Configuration
+	socket transport.ClosableSocket
+}
+
+func (t *BenchmarkTestNode) GetAddr() string {
+	return t.socket.GetAddress()
+}
+
 // NewTestNode returns a new test node.
 func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	addr string, opts ...Option) TestNode {
