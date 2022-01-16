@@ -738,7 +738,7 @@ class Search extends BaseElement {
                 for (const [i, o] of Object.entries(data)) {
                     const el = document.createElement("tr");
                     
-                    el.innerHTML = `<td> <a href=${o.Key}>${o.Key}</a> </td><td>${o.Value}</td>`;
+                    el.innerHTML = `<td> <a href=${o.Link}>${o.Key}</a> </td><td>${o.Value}</td>`;
                     this.searchEngineResultTarget.appendChild(el);
                 }
                 

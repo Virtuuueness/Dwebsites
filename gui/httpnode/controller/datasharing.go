@@ -295,6 +295,12 @@ func (d datasharing) indexPost(w http.ResponseWriter, r *http.Request) {
 	w.Write(js)
 }
 
+type Triplet struct {
+	Key   string
+	Link  string
+	Value float64
+}
+
 // type SearchEngineArgument struct {
 // 	Pattern string
 // 	Budget  uint
@@ -334,17 +340,17 @@ func (d datasharing) searchEnginePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	names, err := d.node.SearchEngineSeach(*regex, arguments.Budget, wait, arguments.Content)
+
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to index: %v", err), http.StatusBadRequest)
 		return
 	}
+	finalNames := make([]Triplet, names.Len())
 	for i, p := range names {
-		names[i] = peer.Pair{Key: fmt.Sprintf("http://%s/", r.Host) + p.Key, Value: p.Value}
+		finalNames[i] = Triplet{Key: p.Key, Link: fmt.Sprintf("http://%s/", r.Host) + p.Key, Value: p.Value}
 	}
 
-	fmt.Printf("names: %v\n", names)
-
-	js, err := json.Marshal(&names)
+	js, err := json.Marshal(&finalNames)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to marshal names: %v", err),
 			http.StatusInternalServerError)

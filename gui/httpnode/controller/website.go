@@ -312,7 +312,7 @@ func replaceLinks(inputContent string, currentUrls []string, hostUrl string) str
 		} else if c[:4] == "http" {
 			replaceArr = append(replaceArr, hostUrl+c[7:])
 		} else {
-			replaceArr = append(replaceArr, c)
+			replaceArr = append(replaceArr, hostUrl+c)
 		}
 	}
 	r := strings.NewReplacer(replaceArr...)
